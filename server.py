@@ -201,7 +201,7 @@ _lock = threading.Lock()
 def veri_cek(sembol):
     try:
         t = yf.Ticker(sembol + ".IS")
-        df_15m = t.history(period="5d", interval="15m")
+        df_15m = t.history(period="60d", interval="2m")
         df_1d  = t.history(period="3mo", interval="1d")
         if df_15m is None or len(df_15m) < 25:
             return None
@@ -359,7 +359,7 @@ def tara():
 def tarama_dongusu():
     while True:
         tara()
-        time.sleep(60 * 15)  # Her 15 dakikada bir
+        time.sleep(60)  # Her 1 dakika bekle (efektif ~3-4 dk)
 
 # ── HTTP SUNUCU ───────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
