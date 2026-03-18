@@ -158,8 +158,10 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
             gunluk_yukari = gema20 > gema50
 
     # SAAT KONTROLU
-    saat = datetime.now().hour * 60 + datetime.now().minute
-    piyasa_acik = (9 * 60 + 45) <= saat <= (17 * 60 + 15)
+    # Türkiye saati (UTC+3) - Railway UTC'de çalışır
+    turkey_now = datetime.utcnow() + timedelta(hours=3)
+    saat = turkey_now.hour * 60 + turkey_now.minute
+    piyasa_acik = (10 * 60 + 0) <= saat <= (18 * 60 + 0)
 
     # KRİTERLER
     kriter1 = fiyat > vwap                            # VWAP uzerinde
