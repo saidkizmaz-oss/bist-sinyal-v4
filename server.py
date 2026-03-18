@@ -245,7 +245,7 @@ def telegram_gonder(mesaj):
 
 # ── SİNYAL KAYDET ────────────────────────────────────────────
 def sinyal_kaydet(sembol, sonuc):
-    now = datetime.now()
+    now = datetime.utcnow() + timedelta(hours=3)
     tarih = now.strftime("%Y-%m-%d")
     saat  = now.strftime("%H:%M")
 
@@ -293,7 +293,7 @@ def sonuc_guncelle():
         if not fiyat:
             continue
 
-        now = datetime.now().strftime("%H:%M")
+        now = (datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M")
         if fiyat >= hedef:
             kar = round((hedef - giris) / giris * 100000, 2)
             con = get_db()
@@ -314,7 +314,7 @@ son_sinyal = {}
 
 def tara():
     global son_sinyal
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Tarama başladı...")
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}
     for sembol in BIST100:
         try:
             if VERI_MODU == "gercek":
@@ -356,7 +356,7 @@ def tara():
             pass
 
     sonuc_guncelle()
-    print(f"[{datetime.now().strftime('%H:%M:%S')}] Tarama bitti.")
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}
 
 def tarama_dongusu():
     while True:
@@ -399,7 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                 "sinyaller": sinyaller,
                 "tarama_sayisi": len(tumu),
                 "sinyal_sayisi": len(sinyaller),
-                "zaman": datetime.now().strftime("%H:%M:%S"),
+                "zaman": (datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S"),
                 "mod": VERI_MODU
             })
 
@@ -447,7 +447,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/ozet":
             con = get_db()
-            bugun = datetime.now().strftime("%Y-%m-%d")
+            bugun = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d")
             bugun_sinyaller = con.execute(
                 "SELECT durum, kar_zarar FROM sinyaller WHERE tarih=?", (bugun,)).fetchall()
             con.close()
@@ -459,7 +459,7 @@ class Handler(BaseHTTPRequestHandler):
                 "bugun_zarar": len(zarar),
                 "bugun_net": round(sum(kar) + sum(zarar), 2),
                 "mod": VERI_MODU,
-                "zaman": datetime.now().strftime("%H:%M:%S"),
+                "zaman": (datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S"),
             })
 
         elif path == "/api/telegram_ayarla":
