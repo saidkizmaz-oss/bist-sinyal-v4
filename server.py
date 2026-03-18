@@ -360,11 +360,16 @@ def tara():
 
                 # Sinyal varsa kaydet (son 15dk içinde aynı hisseden gelmemişse)
                 if sonuc["sinyal"]:
-                    son = son_sinyal.get(sembol)
-                    now = time.time()
-                    if not son or (now - son) > 900:  # 15 dakika
+                    with _lock:
+                        son = son_sinyal.get(sembol)
+                        now = time.time()
+                        if not son or (now - son) > 900:  # 15 dakika
+                            son_sinyal[sembol] = now  # Önceden işaretle (duplicate önleme)
+                            gonder = True
+                        else:
+                            gonder = False
+                    if gonder:
                         if sinyal_kaydet(sembol, sonuc):
-                            son_sinyal[sembol] = now
                             print(f"  🟢 SİNYAL: {sembol} @ {sonuc['fiyat']}")
         except Exception as e:
             hata_sayisi += 1
