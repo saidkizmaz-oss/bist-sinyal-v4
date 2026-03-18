@@ -261,7 +261,7 @@ def sinyal_kaydet(sembol, sonuc):
     con.execute("""INSERT INTO sinyaller (sembol, fiyat_giris, hedef, stop, rsi, hacim_carpan,
         ema20, ema50, tarih, saat, durum) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (sembol, sonuc["fiyat"], sonuc["hedef"], sonuc["stop"],
-         sonuc["rsi"], sonuc["hacim_carpan"], sonuc["ema20"], sonuc["ema50"],
+         sonuc["rsi"], sonuc["hacim_carpan"], sonuc["ema9"], sonuc["ema50"],
          tarih, saat, "BEKLIYOR"))
     con.commit()
     con.close()
