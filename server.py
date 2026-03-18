@@ -314,6 +314,8 @@ son_sinyal = {}
 def tara():
     global son_sinyal
     print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama başlıyor...")
+    veri_sayisi = 0
+    hata_sayisi = 0
     for sembol in BIST100:
         try:
             if VERI_MODU == "gercek":
@@ -325,6 +327,8 @@ def tara():
                 continue
 
             closes_15m, volumes_15m, closes_1d = veri
+            veri_sayisi += 1
+
             sonuc = sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d)
 
             if sonuc:
@@ -352,10 +356,12 @@ def tara():
                             son_sinyal[sembol] = now
                             print(f"  🟢 SİNYAL: {sembol} @ {sonuc['fiyat']}")
         except Exception as e:
-            pass
+            hata_sayisi += 1
+            if hata_sayisi <= 3:
+                print(f"  HATA {sembol}: {e}")
 
     sonuc_guncelle()
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama tamamlandı.")
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama tamamlandı. Veri: {veri_sayisi}, Cache: {len(_cache)}, Hata: {hata_sayisi}")
 
 def tarama_dongusu():
     while True:
