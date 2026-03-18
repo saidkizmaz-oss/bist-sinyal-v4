@@ -499,6 +499,14 @@ class Handler(BaseHTTPRequestHandler):
             threading.Thread(target=tara, daemon=True).start()
             self.send_json({"ok": True, "mesaj": "Tarama başlatıldı"})
 
+        elif path == "/api/sifirla":
+            con = get_db()
+            con.execute("DELETE FROM sinyaller")
+            con.execute("DELETE FROM gunluk_sinyal_sayisi")
+            con.commit(); con.close()
+            with _lock: _cache.clear()
+            self.send_json({"ok": True, "mesaj": "Tüm sinyaller silindi"})
+
         else:
             self.send_response(404); self.end_headers()
 
