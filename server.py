@@ -191,7 +191,7 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
         "kriterler": {
             "vwap": kriter1, "ema_stack": kriter2, "rsi": kriter3,
             "macd": kriter4, "hacim": kriter5, "momentum": kriter6,
-            "hareket": kriter7, "gunluk": kriter8, "saat": kriter9
+            "gunluk": kriter8, "saat": kriter9
         }
     }
 
