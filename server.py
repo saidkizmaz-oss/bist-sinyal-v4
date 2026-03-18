@@ -134,9 +134,10 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
     # MACD histogram
     macd_hist = calc_macd(closes_15m)
 
-    # Hacim
+    # Hacim (son 3 bar ortalaması / genel 20 bar ortalaması)
     vol_ort = sum(volumes_15m[-20:]) / 20
-    hacim_carpan = volumes_15m[-1] / vol_ort if vol_ort else 0
+    vol_son3 = sum(volumes_15m[-3:]) / 3
+    hacim_carpan = vol_son3 / vol_ort if vol_ort else 0
 
     # Son fiyat
     fiyat = closes_15m[-1]
@@ -168,8 +169,8 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
     kriter2 = ema9 > ema21 > ema50                    # EMA9 > EMA21 > EMA50
     kriter3 = 40 <= rsi <= 70                         # RSI uygun bolge (genisletildi)
     kriter4 = macd_hist > 0                           # MACD histogram pozitif
-    kriter5 = hacim_carpan >= 1.2                     # Guclu hacim (1.5→1.2)
-    kriter6 = mumlar_yesil >= 2                       # Son 2 mum yesil
+    kriter5 = hacim_carpan >= 0.8                     # Hacim aktif (3 bar ort)
+    kriter6 = mumlar_yesil >= 1                       # Son mum yesil
     kriter8 = gunluk_yukari                           # Gunluk trend yukari
     kriter9 = piyasa_acik                             # Piyasa saatleri
 
