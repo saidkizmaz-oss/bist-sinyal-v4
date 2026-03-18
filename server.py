@@ -166,11 +166,11 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
 
     # KRİTERLER
     kriter1 = fiyat > vwap                            # VWAP uzerinde
-    kriter2 = ema9 > ema21                            # EMA9 > EMA21 (kısa vade yukarı)
-    kriter3 = 40 <= rsi <= 70                         # RSI uygun bolge (genisletildi)
+    kriter2 = ema9 > ema21 > ema50                    # EMA9 > EMA21 > EMA50 (güçlü trend)
+    kriter3 = 45 <= rsi <= 65                         # RSI uygun bolge
     kriter4 = macd_hist > 0                           # MACD histogram pozitif
-    kriter5 = hacim_carpan >= 0.8                     # Hacim aktif (3 bar ort)
-    kriter6 = mumlar_yesil >= 1                       # Son mum yesil
+    kriter5 = hacim_carpan >= 1.2                     # Güçlü hacim
+    kriter6 = mumlar_yesil >= 2                       # Son 2 mum yesil
     kriter8 = gunluk_yukari                           # Gunluk trend yukari
     kriter9 = piyasa_acik                             # Piyasa saatleri
 
@@ -187,8 +187,8 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
         "macd_hist": round(macd_hist, 4),
         "hacim_carpan": round(hacim_carpan, 2),
         "degisim_15dk": round(degisim_15dk, 2),
-        "hedef": round(fiyat * 1.01, 4),
-        "stop": round(fiyat * 0.995, 4),
+        "hedef": round(fiyat * 1.02, 4),
+        "stop": round(fiyat * 0.99, 4),
         "kriterler": {
             "vwap": kriter1, "ema_stack": kriter2, "rsi": kriter3,
             "macd": kriter4, "hacim": kriter5, "momentum": kriter6,
