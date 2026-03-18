@@ -146,8 +146,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     </div>
 
     <!-- SONUÇLAR -->
-    <div id="tab-sonuclar" class="page">
-      <div class="filtre-bar">
+    <div id="tab-sonuclar" class="page" style="padding:0;gap:0">
+      <div class="filtre-bar" style="flex-shrink:0;padding:8px 12px 6px;margin:0;position:relative;z-index:20;background:var(--bg)">
         <button class="filtre-btn active" onclick="sonucFiltre('',this)">Tümü</button>
         <button class="filtre-btn" onclick="sonucFiltre('KAR',this)">✅ Kâr</button>
         <button class="filtre-btn" onclick="sonucFiltre('ZARAR',this)">❌ Zarar</button>
@@ -156,8 +156,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <button class="filtre-btn" onclick="sonucTarihFiltre('hafta',this)">Bu Hafta</button>
         <button class="filtre-btn" onclick="sonucTarihFiltre('tum',this)">Tüm Zamanlar</button>
       </div>
-      <div id="sonucOzet"></div>
-      <div id="sonucListe"><div class="loading-wrap"><div class="spinner"></div></div></div>
+      <div style="flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch">
+        <div id="sonucOzet"></div>
+        <div id="sonucListe"><div class="loading-wrap"><div class="spinner"></div></div></div>
+      </div>
     </div>
 
     <!-- PERFORMANS -->
