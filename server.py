@@ -203,12 +203,12 @@ _lock = threading.Lock()
 def veri_cek(sembol):
     try:
         t = yf.Ticker(sembol + ".IS")
-        df_15m = t.history(period="5d", interval="2m")
+        df_1m = t.history(period="1d", interval="1m")
         df_1d  = t.history(period="3mo", interval="1d")
-        if df_15m is None or len(df_15m) < 25:
+        if df_1m is None or len(df_1m) < 25:
             return None
-        closes_15m  = [float(x) for x in df_15m["Close"].tolist()]
-        volumes_15m = [int(x) for x in df_15m["Volume"].tolist()]
+        closes_15m  = [float(x) for x in df_1m["Close"].tolist()]
+        volumes_15m = [int(x) for x in df_1m["Volume"].tolist()]
         closes_1d   = [float(x) for x in df_1d["Close"].tolist()] if df_1d is not None else []
         return closes_15m, volumes_15m, closes_1d
     except:
