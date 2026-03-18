@@ -308,13 +308,17 @@ async function yuklesonuclar(){
   let tarihParam='';
   const bugun=new Date().toISOString().split('T')[0];
   if(sonucTarih==='bugun') tarihParam=`&tarih=${bugun}`;
-  else if(sonucTarih==='hafta'){
-    // Son 7 gün — tarih filtresi yok, limit ile halledelim
-    tarihParam='&limit=200';
-  }
+  else if(sonucTarih==='hafta') tarihParam='&limit=200';
 
-  const url=`/api/sinyaller?durum=${sonucDurum}${tarihParam}`;
-  const r=await fetch(url).then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}}));
+  const [r, canli] = await Promise.all([
+    fetch(`/api/sinyaller?durum=${sonucDurum}${tarihParam}`).then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}})),
+    fetch('/api/canli').then(r=>r.json()).catch(()=>({sinyaller:[]}))
+  ]);
+
+  // Anlık fiyat haritası (sembol -> fiyat)
+  const anlikFiyat = {};
+  (canli.sinyaller||[]).forEach(s => anlikFiyat[s.sembol] = s.fiyat);
+
   const oz=r.ozet||{};
   const net=oz.net??0;
 
@@ -338,17 +342,24 @@ async function yuklesonuclar(){
     const durumClass=s.durum==='KAR'?'kar':s.durum==='ZARAR'?'zarar':'bekliyor';
     const badgeClass=s.durum==='KAR'?'badge-kar':s.durum==='ZARAR'?'badge-zarar':'badge-bekliyor';
     const kar=s.kar_zarar;
+    const anlik=anlikFiyat[s.sembol];
+    const anlikHtml=s.durum==='BEKLIYOR'&&anlik
+      ? `<span style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:800;color:var(--cyan);margin-left:8px">${fmt(anlik,2)} TL</span>`
+      : '';
     return`<div class="sonuc-kart ${durumClass}">
       <div class="sonuc-header">
         <span class="sonuc-sembol">${s.sembol}</span>
-        <span class="sonuc-badge ${badgeClass}">${s.durum==='BEKLIYOR'?'⏳ Bekliyor':s.durum==='KAR'?'✅ KÂR':'❌ ZARAR'}</span>
+        <span style="display:flex;align-items:center">
+          <span class="sonuc-badge ${badgeClass}">${s.durum==='BEKLIYOR'?'⏳ Bekliyor':s.durum==='KAR'?'✅ KÂR':'❌ ZARAR'}</span>
+          ${anlikHtml}
+        </span>
       </div>
       <div class="sonuc-kar" style="color:${s.durum==='KAR'?'var(--green)':s.durum==='ZARAR'?'var(--red)':'var(--yellow)'}">
         ${kar!=null?(kar>=0?'+':'')+fmt(kar)+' TL':'Devam ediyor...'}
       </div>
       <div class="sonuc-meta">
-        Giriş: ${fmt(s.fiyat_giris,2)} TL · 
-        ${s.fiyat_cikis?'Çıkış: '+fmt(s.fiyat_cikis,2)+' TL · ':''} 
+        Giriş: ${fmt(s.fiyat_giris,2)} TL ·
+        ${s.fiyat_cikis?'Çıkış: '+fmt(s.fiyat_cikis,2)+' TL · ':''}
         ${s.tarih} ${s.saat}
         ${s.sonuc_saati?' → '+s.sonuc_saati:''}
       </div>
@@ -463,14 +474,25 @@ async function taraSindi(){
 }
 
 // ── GÜNCELLEME ────────────────────────────────────────────
+let sayacVal = 10;
 async function yenile(){
   if(aktifTab==='canli') await yukleCanli();
   if(aktifTab==='sonuclar') await yuklesonuclar();
+  sayacVal = aktifTab==='canli' ? 10 : 30;
 }
 
 goTab('canli', document.querySelector('.nav-item'));
 yenile();
-setInterval(yenile, 30000);
+
+// Canlı tab 10s, diğerleri 30s
+setInterval(async()=>{
+  sayacVal--;
+  if(sayacVal<=0){ await yenile(); }
+  else {
+    const el=$('sayac');
+    if(el){ const t=el.textContent.split('·')[0].trim(); el.textContent=t+' · '+sayacVal+'s'; }
+  }
+}, 1000);
 </script>
 </body>
 </html>
