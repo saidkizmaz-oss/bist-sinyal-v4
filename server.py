@@ -166,15 +166,14 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
     # KRİTERLER
     kriter1 = fiyat > vwap                            # VWAP uzerinde
     kriter2 = ema9 > ema21 > ema50                    # EMA9 > EMA21 > EMA50
-    kriter3 = 45 <= rsi <= 65                         # RSI uygun bolge
+    kriter3 = 40 <= rsi <= 70                         # RSI uygun bolge (genisletildi)
     kriter4 = macd_hist > 0                           # MACD histogram pozitif
-    kriter5 = hacim_carpan >= 1.5                     # Guclu hacim
+    kriter5 = hacim_carpan >= 1.2                     # Guclu hacim (1.5→1.2)
     kriter6 = mumlar_yesil >= 2                       # Son 2 mum yesil
-    kriter7 = 0.3 <= degisim_15dk <= 0.8             # Hareket baslamis ama bitmemis
     kriter8 = gunluk_yukari                           # Gunluk trend yukari
     kriter9 = piyasa_acik                             # Piyasa saatleri
 
-    tumu = kriter1 and kriter2 and kriter3 and kriter4 and kriter5 and kriter6 and kriter7 and kriter8 and kriter9
+    tumu = kriter1 and kriter2 and kriter3 and kriter4 and kriter5 and kriter6 and kriter8 and kriter9
 
     return {
         "sinyal": tumu,
