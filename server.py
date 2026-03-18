@@ -313,7 +313,7 @@ son_sinyal = {}
 
 def tara():
     global son_sinyal
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama başlıyor...")
     for sembol in BIST100:
         try:
             if VERI_MODU == "gercek":
@@ -355,7 +355,7 @@ def tara():
             pass
 
     sonuc_guncelle()
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama tamamlandı.")
 
 def tarama_dongusu():
     while True:
