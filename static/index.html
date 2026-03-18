@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BIST %1">
+<meta name="theme-color" content="#06060f">
+<link rel="manifest" href="/manifest.json">
+<title>BIST %1 Sinyal</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@400;700;900&display=swap');
+:root{
+  --bg:#06060f;--bg2:#0d0d1f;--bg3:#141428;--border:#1e1e42;
+  --green:#00e676;--red:#ff1744;--yellow:#ffd740;--blue:#448aff;
+  --cyan:#00e5ff;--dim:#5a5a7a;--text:#d0d0e8;
+  --safe-top:env(safe-area-inset-top);--safe-bot:env(safe-area-inset-bottom);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Exo 2',sans-serif}
+::-webkit-scrollbar{display:none}
+.app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+.status-bar{height:var(--safe-top);background:var(--bg2);min-height:44px}
+.topbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.logo{font-family:'Share Tech Mono',monospace;font-size:16px;color:#fff}.logo span{color:var(--green)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.mod-badge{padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;font-family:'Share Tech Mono',monospace}
+.mod-gercek{background:var(--green)22;color:var(--green);border:1px solid var(--green)44}
+.mod-demo{background:var(--yellow)22;color:var(--yellow);border:1px solid var(--yellow)44}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sayac{font-size:10px;color:var(--dim);font-family:'Share Tech Mono',monospace}
+.content{flex:1;overflow:hidden;position:relative}
+.page{position:absolute;inset:0;overflow-y:auto;padding:12px;display:none;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+.page.active{display:flex}
+.bottom-nav{background:var(--bg2);border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-bot);flex-shrink:0}
+.nav-item{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 4px 8px;gap:3px;border:none;background:transparent;color:var(--dim);cursor:pointer;transition:color .2s;font-family:'Exo 2',sans-serif}
+.nav-item.active{color:var(--green)}
+.nav-icon{font-size:20px;line-height:1}.nav-label{font-size:10px;font-weight:700}
+
+/* ÖZET KARTLAR */
+.ozet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ozet-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;position:relative;overflow:hidden}
+.ozet-kart::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.ozet-kart.g::before{background:var(--green)}.ozet-kart.s::before{background:var(--red)}
+.ozet-kart.b::before{background:var(--yellow)}.ozet-kart.n::before{background:var(--blue)}
+.ozet-label{font-size:10px;color:var(--dim);letter-spacing:1px;margin-bottom:5px;text-transform:uppercase}
+.ozet-val{font-size:26px;font-weight:900;font-family:'Share Tech Mono',monospace}
+.ozet-kart.g .ozet-val{color:var(--green)}.ozet-kart.s .ozet-val{color:var(--red)}
+.ozet-kart.b .ozet-val{color:var(--yellow)}.ozet-kart.n .ozet-val{color:var(--blue)}
+
+/* SİNYAL KARTI */
+.sinyal-kart{background:var(--bg2);border:1px solid var(--green)44;border-left:3px solid var(--green);border-radius:12px;padding:12px 14px;cursor:pointer}
+.sinyal-kart:active{background:var(--bg3)}
+.sk-header{display:flex;justify-content:space-between;align-items:center}
+.sk-sembol{font-size:18px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace}
+.sk-fiyat{font-size:16px;font-weight:800;color:var(--yellow);font-family:'Share Tech Mono',monospace}
+.sk-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.sk-item{background:var(--bg3);border-radius:7px;padding:6px 8px}
+.sk-item-label{font-size:9px;color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.sk-item-val{font-size:13px;font-weight:800;font-family:'Share Tech Mono',monospace;margin-top:2px}
+.sk-footer{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:11px;color:var(--dim)}
+.kriter-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px}
+.kriter-ok{background:var(--green)}.kriter-no{background:var(--red)}
+
+/* SONUÇ KARTI */
+.sonuc-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.sonuc-kart.kar{border-left:3px solid var(--green)}.sonuc-kart.zarar{border-left:3px solid var(--red)}
+.sonuc-kart.bekliyor{border-left:3px solid var(--yellow)}
+.sonuc-header{display:flex;justify-content:space-between;align-items:center}
+.sonuc-sembol{font-size:15px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace}
+.sonuc-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;font-family:'Share Tech Mono',monospace}
+.badge-kar{background:var(--green)20;color:var(--green);border:1px solid var(--green)40}
+.badge-zarar{background:var(--red)20;color:var(--red);border:1px solid var(--red)40}
+.badge-bekliyor{background:var(--yellow)20;color:var(--yellow);border:1px solid var(--yellow)40}
+.sonuc-kar{font-size:16px;font-weight:900;font-family:'Share Tech Mono',monospace;margin-top:4px}
+.sonuc-meta{font-size:11px;color:var(--dim);margin-top:3px}
+
+/* PERFORMANS */
+.perf-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px}
+.perf-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--bg3);font-size:13px}
+.perf-key{color:var(--dim)}.perf-val{font-weight:800;font-family:'Share Tech Mono',monospace}
+
+/* FİLTRE */
+.filtre-bar{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;position:sticky;top:0;z-index:10;background:var(--bg);padding-top:2px}
+.filtre-bar::-webkit-scrollbar{display:none}
+.filtre-btn{padding:5px 13px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--dim);cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;flex-shrink:0;font-family:'Exo 2',sans-serif}
+.filtre-btn.active{border-color:var(--green);color:var(--green);background:var(--green)15}
+
+/* TELEGRAM AYAR */
+.ayar-kart{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px}
+.form-group{margin-bottom:12px}
+.form-label{font-size:11px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;display:block;text-transform:uppercase}
+.form-input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:8px;outline:none;font-size:14px;-webkit-appearance:none}
+.form-input:focus{border-color:var(--green)}
+.btn-kaydet{width:100%;padding:13px;border-radius:10px;border:none;background:var(--green);color:#000;font-weight:900;font-size:14px;cursor:pointer;font-family:'Exo 2',sans-serif;margin-top:6px}
+.btn-tara{width:100%;padding:13px;border-radius:10px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-weight:800;font-size:14px;cursor:pointer;font-family:'Exo 2',sans-serif}
+
+.loading-wrap{display:flex;align-items:center;justify-content:center;padding:40px;color:var(--dim);gap:10px}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--green);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bos{text-align:center;padding:30px;color:var(--dim);font-size:13px}
+
+/* DETAY */
+.detay-overlay{position:fixed;inset:0;background:#00000088;z-index:100;opacity:0;pointer-events:none;transition:opacity .25s}
+.detay-overlay.open{opacity:1;pointer-events:all}
+.detay-panel{position:fixed;bottom:0;left:0;right:0;z-index:101;background:var(--bg2);border-radius:20px 20px 0 0;padding:0 16px calc(var(--safe-bot) + 20px);transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:85vh;overflow-y:auto}
+.detay-panel.open{transform:translateY(0)}
+.detay-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 16px}
+.dt-row{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bg3);font-size:13px}
+.dt-key{color:var(--dim)}
+
+/* NET SONUÇ BANNER */
+.net-banner{border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center}
+.net-banner.pozitif{background:var(--green)15;border:1px solid var(--green)33}
+.net-banner.negatif{background:var(--red)15;border:1px solid var(--red)33}
+.net-label{font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.net-val{font-size:22px;font-weight:900;font-family:'Share Tech Mono',monospace}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="status-bar"></div>
+  <div class="topbar">
+    <div class="logo">BIST <span>%1</span> SİNYAL</div>
+    <div class="topbar-right">
+      <span class="sayac" id="sayac"></span>
+      <div class="pulse"></div>
+      <div id="modBadge" class="mod-badge mod-demo">DEMO</div>
+    </div>
+  </div>
+
+  <div class="content">
+    <!-- CANLI SİNYALLER -->
+    <div id="tab-canli" class="page active">
+      <div class="ozet-grid">
+        <div class="ozet-kart g"><div class="ozet-label">Bugün Sinyal</div><div class="ozet-val" id="oz-sinyal">—</div></div>
+        <div class="ozet-kart n"><div class="ozet-label">Net Kâr/Zarar</div><div class="ozet-val" id="oz-net">—</div></div>
+        <div class="ozet-kart g"><div class="ozet-label">Bugün Kâr</div><div class="ozet-val" id="oz-kar">—</div></div>
+        <div class="ozet-kart s"><div class="ozet-label">Bugün Zarar</div><div class="ozet-val" id="oz-zarar">—</div></div>
+      </div>
+      <button class="btn-tara" onclick="taraSindi()">🔍 Şimdi Tara</button>
+      <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:4px">AKTİF SİNYALLER</div>
+      <div id="canliListe"><div class="loading-wrap"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- SONUÇLAR -->
+    <div id="tab-sonuclar" class="page">
+      <div class="filtre-bar">
+        <button class="filtre-btn active" onclick="sonucFiltre('',this)">Tümü</button>
+        <button class="filtre-btn" onclick="sonucFiltre('KAR',this)">✅ Kâr</button>
+        <button class="filtre-btn" onclick="sonucFiltre('ZARAR',this)">❌ Zarar</button>
+        <button class="filtre-btn" onclick="sonucFiltre('BEKLIYOR',this)">⏳ Bekliyor</button>
+        <button class="filtre-btn" onclick="sonucTarihFiltre('bugun',this)">Bugün</button>
+        <button class="filtre-btn" onclick="sonucTarihFiltre('hafta',this)">Bu Hafta</button>
+        <button class="filtre-btn" onclick="sonucTarihFiltre('tum',this)">Tüm Zamanlar</button>
+      </div>
+      <div id="sonucOzet"></div>
+      <div id="sonucListe"><div class="loading-wrap"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- PERFORMANS -->
+    <div id="tab-performans" class="page">
+      <div id="perfIcerik"><div class="loading-wrap"><div class="spinner"></div></div></div>
+    </div>
+
+    <!-- AYARLAR -->
+    <div id="tab-ayarlar" class="page">
+      <div class="ayar-kart">
+        <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:12px">📱 Telegram Bildirimi</div>
+        <div style="font-size:12px;color:var(--dim);margin-bottom:14px;line-height:1.6">
+          1. Telegram'da <b style="color:#fff">@BotFather</b>'a yaz<br>
+          2. /newbot → isim ver → token al<br>
+          3. Botuna yaz → <b style="color:#fff">@userinfobot</b>'tan Chat ID al
+        </div>
+        <div class="form-group">
+          <label class="form-label">Bot Token</label>
+          <input id="tg-token" class="form-input" placeholder="1234567890:AAF..." type="password">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Chat ID</label>
+          <input id="tg-chatid" class="form-input" placeholder="123456789">
+        </div>
+        <button class="btn-kaydet" onclick="telegramKaydet()">💾 Kaydet & Test Et</button>
+      </div>
+      <div class="ayar-kart">
+        <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:12px">📊 Sistem Bilgisi</div>
+        <div id="sistemBilgi"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-item active" onclick="goTab('canli',this)"><span class="nav-icon">🟢</span><span class="nav-label">Canlı</span></button>
+    <button class="nav-item" onclick="goTab('sonuclar',this)"><span class="nav-icon">📋</span><span class="nav-label">Sonuçlar</span></button>
+    <button class="nav-item" onclick="goTab('performans',this)"><span class="nav-icon">📈</span><span class="nav-label">Performans</span></button>
+    <button class="nav-item" onclick="goTab('ayarlar',this)"><span class="nav-icon">⚙️</span><span class="nav-label">Ayarlar</span></button>
+  </div>
+</div>
+
+<!-- DETAY PANELİ -->
+<div class="detay-overlay" id="detayOverlay" onclick="detayKapat()"></div>
+<div class="detay-panel" id="detayPanel">
+  <div class="detay-handle"></div>
+  <div id="detayIcerik"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = (n,d=2) => n==null?'—':Number(n).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
+let aktifTab='canli', sonucDurum='', sonucTarih='bugun';
+
+// ── NAVİGASYON ────────────────────────────────────────────
+function goTab(id,btn){
+  aktifTab=id;
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  $('tab-'+id).classList.add('active');
+  if(btn)btn.classList.add('active');
+  if(id==='sonuclar')yuklesonuclar();
+  if(id==='performans')yuklePerformans();
+  if(id==='ayarlar')yukleSistemBilgi();
+}
+
+// ── CANLI SİNYALLER ──────────────────────────────────────
+async function yukleCanli(){
+  const r=await fetch('/api/canli').then(r=>r.json()).catch(()=>({sinyaller:[],sinyal_sayisi:0}));
+  const ozet=await fetch('/api/ozet').then(r=>r.json()).catch(()=>({}));
+
+  $('oz-sinyal').textContent=ozet.bugun_sinyal??'0';
+  const net=ozet.bugun_net??0;
+  $('oz-net').textContent=(net>=0?'+':'')+fmt(net)+' TL';
+  $('oz-net').style.color=net>=0?'var(--green)':'var(--red)';
+  $('oz-kar').textContent=ozet.bugun_kar??'0';
+  $('oz-zarar').textContent=ozet.bugun_zarar??'0';
+  $('modBadge').textContent=r.mod==='gercek'?'🟢 CANLI':'⚡ DEMO';
+  $('modBadge').className='mod-badge '+(r.mod==='gercek'?'mod-gercek':'mod-demo');
+  if(r.zaman)$('sayac').textContent=r.zaman;
+
+  const liste=r.sinyaller||[];
+  if(!liste.length){
+    $('canliListe').innerHTML=`<div class="bos">Şu an aktif sinyal yok<br><span style="font-size:11px">Sistem 15 dakikada bir tarıyor</span></div>`;
+    return;
+  }
+  $('canliListe').innerHTML=liste.map(s=>`
+    <div class="sinyal-kart" onclick="detayAc(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+      <div class="sk-header">
+        <span class="sk-sembol">${s.sembol}</span>
+        <span class="sk-fiyat">${fmt(s.fiyat,2)} TL</span>
+      </div>
+      <div class="sk-body">
+        <div class="sk-item">
+          <div class="sk-item-label">Hedef</div>
+          <div class="sk-item-val" style="color:var(--green)">${fmt(s.hedef,2)}</div>
+        </div>
+        <div class="sk-item">
+          <div class="sk-item-label">Stop</div>
+          <div class="sk-item-val" style="color:var(--red)">${fmt(s.stop,2)}</div>
+        </div>
+        <div class="sk-item">
+          <div class="sk-item-label">RSI</div>
+          <div class="sk-item-val" style="color:var(--yellow)">${s.rsi}</div>
+        </div>
+        <div class="sk-item">
+          <div class="sk-item-label">Hacim</div>
+          <div class="sk-item-val" style="color:var(--cyan)">x${s.hacim_carpan}</div>
+        </div>
+        <div class="sk-item">
+          <div class="sk-item-label">15dk</div>
+          <div class="sk-item-val" style="color:var(--green)">+${s.degisim_15dk}%</div>
+        </div>
+        <div class="sk-item">
+          <div class="sk-item-label">Kazanç</div>
+          <div class="sk-item-val" style="color:var(--green)">+1.000 TL</div>
+        </div>
+      </div>
+      <div class="sk-footer">
+        <span>${kriterDots(s.kriterler)}</span>
+        <span>100K TL pozisyon</span>
+      </div>
+    </div>`).join('');
+}
+
+function kriterDots(k){
+  if(!k)return'';
+  const isimler={trend:'Trend',rsi:'RSI',hacim:'Hacim',momentum:'Mom',hareket:'Har',fiyat_ust:'Fyt',gunluk:'Gnl',saat:'Saat'};
+  return Object.entries(k).map(([key,val])=>
+    `<span class="kriter-dot ${val?'kriter-ok':'kriter-no'}"></span>${isimler[key]||key}`
+  ).join(' ');
+}
+
+// ── SONUÇLAR ─────────────────────────────────────────────
+function sonucFiltre(durum,btn){
+  sonucDurum=durum;
+  document.querySelectorAll('#tab-sonuclar .filtre-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  yuklesonuclar();
+}
+function sonucTarihFiltre(tarih,btn){
+  sonucTarih=tarih;
+  document.querySelectorAll('#tab-sonuclar .filtre-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  yuklesonuclar();
+}
+
+async function yuklesonuclar(){
+  let tarihParam='';
+  const bugun=new Date().toISOString().split('T')[0];
+  if(sonucTarih==='bugun') tarihParam=`&tarih=${bugun}`;
+  else if(sonucTarih==='hafta'){
+    // Son 7 gün — tarih filtresi yok, limit ile halledelim
+    tarihParam='&limit=200';
+  }
+
+  const url=`/api/sinyaller?durum=${sonucDurum}${tarihParam}`;
+  const r=await fetch(url).then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}}));
+  const oz=r.ozet||{};
+  const net=oz.net??0;
+
+  $('sonucOzet').innerHTML=`
+    <div class="net-banner ${net>=0?'pozitif':'negatif'}">
+      <div>
+        <div class="net-label">Net Kâr/Zarar</div>
+        <div class="net-val" style="color:${net>=0?'var(--green)':'var(--red)'}">${net>=0?'+':''}${fmt(net)} TL</div>
+      </div>
+      <div style="text-align:right;font-size:12px;color:var(--dim)">
+        <div>✅ ${oz.kar_sayisi||0} Kâr</div>
+        <div>❌ ${oz.zarar_sayisi||0} Zarar</div>
+        <div>⏳ ${oz.bekliyor||0} Bekliyor</div>
+        <div style="color:var(--blue);margin-top:4px">%${fmt(oz.basari_oran||0,1)} başarı</div>
+      </div>
+    </div>`;
+
+  const liste=r.sinyaller||[];
+  if(!liste.length){$('sonucListe').innerHTML=`<div class="bos">Kayıt bulunamadı</div>`;return;}
+  $('sonucListe').innerHTML=liste.map(s=>{
+    const durumClass=s.durum==='KAR'?'kar':s.durum==='ZARAR'?'zarar':'bekliyor';
+    const badgeClass=s.durum==='KAR'?'badge-kar':s.durum==='ZARAR'?'badge-zarar':'badge-bekliyor';
+    const kar=s.kar_zarar;
+    return`<div class="sonuc-kart ${durumClass}">
+      <div class="sonuc-header">
+        <span class="sonuc-sembol">${s.sembol}</span>
+        <span class="sonuc-badge ${badgeClass}">${s.durum==='BEKLIYOR'?'⏳ Bekliyor':s.durum==='KAR'?'✅ KÂR':'❌ ZARAR'}</span>
+      </div>
+      <div class="sonuc-kar" style="color:${s.durum==='KAR'?'var(--green)':s.durum==='ZARAR'?'var(--red)':'var(--yellow)'}">
+        ${kar!=null?(kar>=0?'+':'')+fmt(kar)+' TL':'Devam ediyor...'}
+      </div>
+      <div class="sonuc-meta">
+        Giriş: ${fmt(s.fiyat_giris,2)} TL · 
+        ${s.fiyat_cikis?'Çıkış: '+fmt(s.fiyat_cikis,2)+' TL · ':''} 
+        ${s.tarih} ${s.saat}
+        ${s.sonuc_saati?' → '+s.sonuc_saati:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── PERFORMANS ────────────────────────────────────────────
+async function yuklePerformans(){
+  const r=await fetch('/api/sinyaller?limit=500').then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}}));
+  const liste=r.sinyaller||[];
+  const oz=r.ozet||{};
+
+  // Günlük grupla
+  const gunler={};
+  liste.forEach(s=>{
+    if(!gunler[s.tarih])gunler[s.tarih]={tarih:s.tarih,toplam:0,kar:0,zarar:0,net:0};
+    gunler[s.tarih].toplam++;
+    if(s.durum==='KAR'){gunler[s.tarih].kar++;gunler[s.tarih].net+=(s.kar_zarar||0);}
+    if(s.durum==='ZARAR'){gunler[s.tarih].zarar++;gunler[s.tarih].net+=(s.kar_zarar||0);}
+  });
+  const gunSirali=Object.values(gunler).sort((a,b)=>b.tarih.localeCompare(a.tarih));
+
+  $('perfIcerik').innerHTML=`
+    <div class="perf-kart">
+      <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:10px">📊 GENEL İSTATİSTİK</div>
+      ${[
+        ['Toplam Sinyal', oz.toplam||0, 'var(--text)'],
+        ['Kâr İşlem', oz.kar_sayisi||0, 'var(--green)'],
+        ['Zarar İşlem', oz.zarar_sayisi||0, 'var(--red)'],
+        ['Başarı Oranı', fmt(oz.basari_oran||0,1)+'%', oz.basari_oran>=50?'var(--green)':'var(--red)'],
+        ['Toplam Kâr', '+'+fmt(oz.toplam_kar||0)+' TL', 'var(--green)'],
+        ['Toplam Zarar', fmt(oz.toplam_zarar||0)+' TL', 'var(--red)'],
+        ['Net Sonuç', (oz.net>=0?'+':'')+fmt(oz.net||0)+' TL', oz.net>=0?'var(--green)':'var(--red)'],
+      ].map(([k,v,c])=>`<div class="perf-row"><span class="perf-key">${k}</span><span class="perf-val" style="color:${c}">${v}</span></div>`).join('')}
+    </div>
+    <div style="font-size:11px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin-top:4px">GÜNLÜK DETAY</div>
+    ${gunSirali.length?gunSirali.map(g=>`
+      <div class="perf-kart">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-weight:800;color:#fff">${g.tarih}</span>
+          <span style="font-weight:900;font-family:'Share Tech Mono',monospace;color:${g.net>=0?'var(--green)':'var(--red)'}">${g.net>=0?'+':''}${fmt(g.net)} TL</span>
+        </div>
+        <div style="font-size:11px;color:var(--dim);margin-top:4px">${g.toplam} sinyal · ✅${g.kar} ❌${g.zarar}</div>
+      </div>`).join(''):'<div class="bos">Henüz veri yok</div>'}`;
+}
+
+// ── DETAY PANELİ ─────────────────────────────────────────
+function detayAc(s){
+  $('detayIcerik').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:22px;font-weight:900;color:#fff;font-family:'Share Tech Mono',monospace">${s.sembol}</div>
+      <div style="font-size:22px;font-weight:900;color:var(--yellow);font-family:'Share Tech Mono',monospace">${fmt(s.fiyat,2)} TL</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0">
+      ${[
+        ['🎯 Hedef (+%1)', fmt(s.hedef,2)+' TL', 'var(--green)'],
+        ['🛡 Stop (-%0.5)', fmt(s.stop,2)+' TL', 'var(--red)'],
+        ['💰 Pozisyon', '100.000 TL', 'var(--text)'],
+        ['💵 Potansiyel Kâr', '+1.000 TL', 'var(--green)'],
+        ['📉 Max Zarar', '-500 TL', 'var(--red)'],
+        ['📊 RSI', s.rsi, s.rsi<65?'var(--green)':'var(--red)'],
+        ['📦 Hacim', 'x'+s.hacim_carpan, 'var(--cyan)'],
+        ['📈 15dk Değişim', '+'+s.degisim_15dk+'%', 'var(--green)'],
+        ['EMA 20', fmt(s.ema20,2), 'var(--yellow)'],
+        ['EMA 50', fmt(s.ema50,2), 'var(--blue)'],
+      ].map(([k,v,c])=>`<div class="dt-row"><span class="dt-key">${k}</span><span style="color:${c};font-weight:800;font-family:'Share Tech Mono',monospace">${v}</span></div>`).join('')}
+    </div>
+    <div style="margin-top:14px">
+      <button onclick="window.open('https://www.tradingview.com/chart/?symbol=BIST:${s.sembol}','_blank')" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--blue);background:transparent;color:var(--blue);font-weight:800;font-size:13px;cursor:pointer;font-family:'Exo 2',sans-serif">📊 TradingView'da Aç</button>
+    </div>`;
+  $('detayOverlay').classList.add('open');
+  $('detayPanel').classList.add('open');
+}
+function detayKapat(){
+  $('detayOverlay').classList.remove('open');
+  $('detayPanel').classList.remove('open');
+}
+
+// ── AYARLAR ───────────────────────────────────────────────
+async function telegramKaydet(){
+  const token=$('tg-token').value.trim();
+  const chatid=$('tg-chatid').value.trim();
+  if(!token||!chatid){alert('Token ve Chat ID zorunlu!');return;}
+  const r=await fetch(`/api/telegram_ayarla?token=${token}&chat_id=${chatid}`).then(r=>r.json()).catch(()=>({hata:'Bağlantı hatası'}));
+  if(r.ok)alert('✅ Telegram bağlandı! Test mesajı gönderildi.');
+  else alert('❌ Hata: '+r.hata);
+}
+
+async function yukleSistemBilgi(){
+  const r=await fetch('/api/ozet').then(r=>r.json()).catch(()=>({}));
+  $('sistemBilgi').innerHTML=`
+    ${[
+      ['Veri Modu', r.mod==='gercek'?'🟢 Gerçek Veri':'⚡ Demo Mod'],
+      ['Tarama Aralığı', 'Her 15 dakika'],
+      ['Piyasa Saatleri', '09:45 - 17:15'],
+      ['Her İşlem', '100.000 TL'],
+      ['Hedef', '+%1 (+1.000 TL)'],
+      ['Stop-Loss', '-%0.5 (-500 TL)'],
+      ['Risk/Ödül', '1:2'],
+    ].map(([k,v])=>`<div class="perf-row"><span class="perf-key">${k}</span><span class="perf-val" style="color:var(--text)">${v}</span></div>`).join('')}`;
+}
+
+async function taraSindi(){
+  const btn=document.querySelector('.btn-tara');
+  btn.textContent='⏳ Taranıyor...';btn.disabled=true;
+  await fetch('/api/tara_simdi');
+  setTimeout(()=>{
+    btn.textContent='🔍 Şimdi Tara';btn.disabled=false;
+    yukleCanli();
+  }, 3000);
+}
+
+// ── GÜNCELLEME ────────────────────────────────────────────
+async function yenile(){
+  if(aktifTab==='canli') await yukleCanli();
+  if(aktifTab==='sonuclar') await yuklesonuclar();
+}
+
+goTab('canli', document.querySelector('.nav-item'));
+yenile();
+setInterval(yenile, 30000);
+</script>
+</body>
+</html>
