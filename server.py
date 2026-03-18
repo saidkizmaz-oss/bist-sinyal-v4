@@ -166,7 +166,7 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
 
     # KRİTERLER
     kriter1 = fiyat > vwap                            # VWAP uzerinde
-    kriter2 = ema9 > ema21 > ema50                    # EMA9 > EMA21 > EMA50
+    kriter2 = ema9 > ema21                            # EMA9 > EMA21 (kısa vade yukarı)
     kriter3 = 40 <= rsi <= 70                         # RSI uygun bolge (genisletildi)
     kriter4 = macd_hist > 0                           # MACD histogram pozitif
     kriter5 = hacim_carpan >= 0.8                     # Hacim aktif (3 bar ort)
