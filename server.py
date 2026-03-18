@@ -269,8 +269,8 @@ def sinyal_kaydet(sembol, sonuc):
     # Telegram bildirimi
     msg = (f"🟢 <b>{sembol}</b> — AL SİNYALİ\n"
            f"💰 Fiyat: {sonuc['fiyat']:.2f} TL\n"
-           f"🎯 Hedef: {sonuc['hedef']:.2f} TL (+%1)\n"
-           f"🛡 Stop: {sonuc['stop']:.2f} TL (-%%0.5)\n"
+           f"🎯 Hedef: {sonuc['hedef']:.2f} TL (+%2)\n"
+           f"🛡 Stop: {sonuc['stop']:.2f} TL (-%1)\n"
            f"📊 RSI: {sonuc['rsi']} | Hacim: x{sonuc['hacim_carpan']}\n"
            f"📈 15dk değişim: +{sonuc['degisim_15dk']}%\n"
            f"🕐 {saat}")
