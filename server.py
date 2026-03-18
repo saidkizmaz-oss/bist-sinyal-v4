@@ -203,7 +203,7 @@ _lock = threading.Lock()
 def veri_cek(sembol):
     try:
         t = yf.Ticker(sembol + ".IS")
-        df_1m = t.history(period="5d", interval="2m")
+        df_1m = t.history(period="5d", interval="15m")
         df_1d  = t.history(period="3mo", interval="1d")
         if df_1m is None or len(df_1m) < 25:
             return None
