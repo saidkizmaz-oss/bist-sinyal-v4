@@ -162,17 +162,20 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
     # Türkiye saati (UTC+3) - Railway UTC'de çalışır
     turkey_now = datetime.utcnow() + timedelta(hours=3)
     saat = turkey_now.hour * 60 + turkey_now.minute
-    piyasa_acik = (10 * 60 + 0) <= saat <= (18 * 60 + 0)
+    # Açılış 30dk beklenir, 12:00-13:30 ölü bölge kapalı, kapanış 17:40
+    pencere1 = (10 * 60 + 30) <= saat <= (12 * 60 + 0)   # 10:30-12:00
+    pencere2 = (13 * 60 + 30) <= saat <= (17 * 60 + 40)  # 13:30-17:40
+    piyasa_acik = pencere1 or pencere2
 
     # KRİTERLER
     kriter1 = fiyat > vwap                            # VWAP uzerinde
     kriter2 = ema9 > ema21 > ema50                    # EMA9 > EMA21 > EMA50 (güçlü trend)
-    kriter3 = 45 <= rsi <= 65                         # RSI uygun bolge
+    kriter3 = rsi >= 50                               # RSI 50 üstü (trend filtresi)
     kriter4 = macd_hist > 0                           # MACD histogram pozitif
-    kriter5 = hacim_carpan >= 1.2                     # Güçlü hacim
+    kriter5 = hacim_carpan >= 1.5                     # Güçlü hacim (1.5x)
     kriter6 = mumlar_yesil >= 2                       # Son 2 mum yesil
     kriter8 = gunluk_yukari                           # Gunluk trend yukari
-    kriter9 = piyasa_acik                             # Piyasa saatleri
+    kriter9 = piyasa_acik                             # Piyasa saatleri (ölü bölge hariç)
 
     tumu = kriter1 and kriter2 and kriter3 and kriter4 and kriter5 and kriter6 and kriter8 and kriter9
 
