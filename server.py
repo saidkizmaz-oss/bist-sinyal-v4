@@ -316,6 +316,7 @@ def tara():
     print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama başlıyor...")
     veri_sayisi = 0
     hata_sayisi = 0
+    kriter_say = {f"k{i}": 0 for i in [1,2,3,4,5,6,8,9]}
     for sembol in BIST100:
         try:
             if VERI_MODU == "gercek":
@@ -332,6 +333,15 @@ def tara():
             sonuc = sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d)
 
             if sonuc:
+                k = sonuc.get("kriterler", {})
+                if k.get("vwap"): kriter_say["k1"] += 1
+                if k.get("ema_stack"): kriter_say["k2"] += 1
+                if k.get("rsi"): kriter_say["k3"] += 1
+                if k.get("macd"): kriter_say["k4"] += 1
+                if k.get("hacim"): kriter_say["k5"] += 1
+                if k.get("momentum"): kriter_say["k6"] += 1
+                if k.get("gunluk"): kriter_say["k8"] += 1
+                if k.get("saat"): kriter_say["k9"] += 1
                 with _lock:
                     _cache[sembol] = {
                         "sembol": sembol,
@@ -361,7 +371,7 @@ def tara():
                 print(f"  HATA {sembol}: {e}")
 
     sonuc_guncelle()
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama tamamlandı. Veri: {veri_sayisi}, Cache: {len(_cache)}, Hata: {hata_sayisi}")
+    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama bitti. Cache:{len(_cache)} | VWAP:{kriter_say['k1']} EMA:{kriter_say['k2']} RSI:{kriter_say['k3']} MACD:{kriter_say['k4']} HACIM:{kriter_say['k5']} MOM:{kriter_say['k6']} GUNLUK:{kriter_say['k8']} SAAT:{kriter_say['k9']}")
 
 def tarama_dongusu():
     while True:
