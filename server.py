@@ -331,7 +331,7 @@ def tara():
                     _cache[sembol] = {
                         "sembol": sembol,
                         "fiyat": sonuc["fiyat"],
-                        "ema20": sonuc["ema20"],
+                        "ema20": sonuc["ema9"],
                         "ema50": sonuc["ema50"],
                         "rsi": sonuc["rsi"],
                         "hacim_carpan": sonuc["hacim_carpan"],
