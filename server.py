@@ -14,7 +14,7 @@ except ImportError:
     VERI_MODU = "demo"
 
 PORT = int(os.environ.get("PORT", 8765))
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bist.db")
+DB_PATH = "/data/bist.db" if os.path.isdir("/data") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "bist.db")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
