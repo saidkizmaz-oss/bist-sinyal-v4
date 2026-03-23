@@ -167,6 +167,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div id="perfIcerik"><div class="loading-wrap"><div class="spinner"></div></div></div>
     </div>
 
+    <!-- AI ASİSTAN -->
+    <div id="tab-ai" class="page" style="display:flex;flex-direction:column;height:100%;padding:0">
+      <div id="ai-mesajlar" style="flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px"></div>
+      <div style="padding:10px 14px 6px;border-top:1px solid rgba(255,255,255,0.07);background:var(--bg1)">
+        <div style="display:flex;gap:8px">
+          <input id="ai-input" style="flex:1;background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 14px;color:#fff;font-size:14px;outline:none" placeholder="Bir şey sor... (örn: THYAO analiz et)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){aiGonder();event.preventDefault()}">
+          <button onclick="aiGonder()" style="background:var(--green);border:none;border-radius:12px;padding:10px 16px;color:#000;font-weight:800;font-size:14px;cursor:pointer">▶</button>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+          <button onclick="aiHizliSor('Bugünkü sinyalleri analiz et')" style="background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 10px;color:var(--dim);font-size:11px;cursor:pointer">📊 Bugün analiz</button>
+          <button onclick="aiHizliSor('Sistemin genel başarı oranı nasıl?')" style="background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 10px;color:var(--dim);font-size:11px;cursor:pointer">📈 Başarı oranı</button>
+          <button onclick="aiHizliSor('Kriterleri nasıl iyileştirebiliriz?')" style="background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 10px;color:var(--dim);font-size:11px;cursor:pointer">⚙️ Kriter önerisi</button>
+          <button onclick="aiHizliSor('Bugün piyasa nasıl?')" style="background:var(--bg2);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:5px 10px;color:var(--dim);font-size:11px;cursor:pointer">🌍 Piyasa yorumu</button>
+        </div>
+      </div>
+    </div>
+
     <!-- AYARLAR -->
     <div id="tab-ayarlar" class="page">
       <div class="ayar-kart">
@@ -197,6 +214,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="nav-item active" onclick="goTab('canli',this)"><span class="nav-icon">🟢</span><span class="nav-label">Canlı</span></button>
     <button class="nav-item" onclick="goTab('sonuclar',this)"><span class="nav-icon">📋</span><span class="nav-label">Sonuçlar</span></button>
     <button class="nav-item" onclick="goTab('performans',this)"><span class="nav-icon">📈</span><span class="nav-label">Performans</span></button>
+    <button class="nav-item" onclick="goTab('ai',this)"><span class="nav-icon">🤖</span><span class="nav-label">AI</span></button>
     <button class="nav-item" onclick="goTab('ayarlar',this)"><span class="nav-icon">⚙️</span><span class="nav-label">Ayarlar</span></button>
   </div>
 </div>
@@ -481,6 +499,49 @@ async function yenile(){
   if(aktifTab==='canli') await yukleCanli();
   if(aktifTab==='sonuclar') await yuklesonuclar();
   sayacVal = aktifTab==='canli' ? 10 : 30;
+}
+
+// ── AI ASİSTAN ────────────────────────────────────────────────
+let aiYukleniyor = false;
+
+function aiMesajEkle(rol, icerik) {
+  const kutu = document.getElementById('ai-mesajlar');
+  const div = document.createElement('div');
+  const kullanici = rol === 'user';
+  div.style.cssText = `display:flex;justify-content:${kullanici?'flex-end':'flex-start'}`;
+  div.innerHTML = `<div style="max-width:85%;background:${kullanici?'var(--green)':'var(--bg2)'};color:${kullanici?'#000':'#fff'};border-radius:${kullanici?'16px 16px 4px 16px':'16px 16px 16px 4px'};padding:10px 14px;font-size:13px;line-height:1.6;white-space:pre-wrap">${icerik}</div>`;
+  kutu.appendChild(div);
+  kutu.scrollTop = kutu.scrollHeight;
+  return div;
+}
+
+async function aiGonder() {
+  if (aiYukleniyor) return;
+  const input = document.getElementById('ai-input');
+  const mesaj = input.value.trim();
+  if (!mesaj) return;
+  input.value = '';
+  aiMesajEkle('user', mesaj);
+
+  aiYukleniyor = true;
+  const yukDiv = aiMesajEkle('ai', '⏳ Düşünüyor...');
+
+  try {
+    const r = await fetch('/api/ai', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mesaj, chat_id: 'web_kullanici'})
+    }).then(r => r.json());
+    yukDiv.querySelector('div').textContent = r.cevap || r.hata || 'Hata oluştu.';
+  } catch(e) {
+    yukDiv.querySelector('div').textContent = '⚠️ Bağlantı hatası.';
+  }
+  aiYukleniyor = false;
+}
+
+function aiHizliSor(soru) {
+  document.getElementById('ai-input').value = soru;
+  aiGonder();
 }
 
 goTab('canli', document.querySelector('.nav-item'));

@@ -13,10 +13,22 @@ try:
 except ImportError:
     VERI_MODU = "demo"
 
+try:
+    import anthropic as _anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    HAS_ANTHROPIC = False
+
 PORT = int(os.environ.get("PORT", 8765))
 DB_PATH = "/data/bist.db" if os.path.isdir("/data") else os.path.join(os.path.dirname(os.path.abspath(__file__)), "bist.db")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+RAILWAY_URL = os.environ.get("RAILWAY_PUBLIC_DOMAIN", "satisfied-harmony-production-69fa.up.railway.app")
+
+# Konuşma geçmişi (chat_id → mesaj listesi)
+_konusma_gecmisi = {}
+_ai_lock = threading.Lock()
 
 BIST100 = [
     "THYAO","GARAN","AKBNK","YKBNK","EREGL","ASELS","SISE","KCHOL",
@@ -246,6 +258,121 @@ def telegram_gonder(mesaj):
     except Exception as e:
         print(f"Telegram hatası: {e}")
 
+def telegram_gonder_chat(mesaj, chat_id):
+    if not TELEGRAM_TOKEN:
+        return
+    # Telegram mesaj limiti 4096 karakter, uzunsa böl
+    for i in range(0, len(mesaj), 4000):
+        parca = mesaj[i:i+4000]
+        try:
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+            data = json.dumps({"chat_id": chat_id, "text": parca, "parse_mode": "HTML"}).encode()
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10)
+        except Exception as e:
+            print(f"Telegram chat hatası: {e}")
+
+def telegram_webhook_ayarla():
+    if not TELEGRAM_TOKEN:
+        return
+    try:
+        webhook_url = f"https://{RAILWAY_URL}/telegram_webhook"
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/setWebhook"
+        data = json.dumps({"url": webhook_url, "drop_pending_updates": True}).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=10)
+        result = json.loads(resp.read())
+        print(f"Telegram webhook ayarlandı: {webhook_url} → {result.get('description', '')}")
+    except Exception as e:
+        print(f"Webhook ayarlama hatası: {e}")
+
+# ── AI ASİSTAN ────────────────────────────────────────────────
+def ai_cevap(mesaj: str, chat_id: str):
+    if not HAS_ANTHROPIC or not ANTHROPIC_API_KEY:
+        telegram_gonder_chat("⚠️ AI devre dışı (ANTHROPIC_API_KEY eksik).", chat_id)
+        return
+
+    now = datetime.utcnow() + timedelta(hours=3)
+    bugun = now.strftime("%Y-%m-%d")
+
+    # Güncel cache bilgisi
+    with _lock:
+        sinyal_cache = list(_cache.values())
+    aktif = [s for s in sinyal_cache if s.get("sinyal")]
+
+    # DB: son sinyaller + istatistik
+    con = get_db()
+    son30 = con.execute(
+        "SELECT sembol, fiyat_giris, hedef, stop, rsi, hacim_carpan, tarih, saat, durum, kar_zarar "
+        "FROM sinyaller ORDER BY id DESC LIMIT 30"
+    ).fetchall()
+    bugun_rows = con.execute(
+        "SELECT durum, COUNT(*), SUM(kar_zarar) FROM sinyaller WHERE tarih=? GROUP BY durum", (bugun,)
+    ).fetchall()
+    genel_rows = con.execute(
+        "SELECT durum, COUNT(*), SUM(kar_zarar) FROM sinyaller GROUP BY durum"
+    ).fetchall()
+    con.close()
+
+    bugun_ozet = {r[0]: (r[1], r[2] or 0) for r in bugun_rows}
+    genel_ozet = {r[0]: (r[1], r[2] or 0) for r in genel_rows}
+
+    sistem_prompt = f"""Sen BIST (Borsa İstanbul) uzmanı bir AI borsa asistanısın. Kullanıcı seninle Telegram'dan konuşuyor.
+
+📅 Şu an: {now.strftime('%d.%m.%Y %H:%M')} (Türkiye saati)
+
+🔴 CANLI AKTİF SİNYALLER ({len(aktif)} adet):
+{chr(10).join([f"• {s['sembol']}: {s['fiyat']:.2f} TL | RSI:{s['rsi']} | Hacim:x{s['hacim_carpan']}" for s in aktif]) or '• Şu an aktif sinyal yok'}
+
+📊 BUGÜN ({bugun}):
+• KAR: {bugun_ozet.get('KAR', (0,0))[0]} sinyal ({bugun_ozet.get('KAR', (0,0))[1]:.0f} TL)
+• ZARAR: {bugun_ozet.get('ZARAR', (0,0))[0]} sinyal ({bugun_ozet.get('ZARAR', (0,0))[1]:.0f} TL)
+• BEKLIYOR: {bugun_ozet.get('BEKLIYOR', (0,0))[0]} sinyal
+
+📈 GENEL İSTATİSTİK (tüm zamanlar):
+• KAR: {genel_ozet.get('KAR', (0,0))[0]} sinyal ({genel_ozet.get('KAR', (0,0))[1]:.0f} TL)
+• ZARAR: {genel_ozet.get('ZARAR', (0,0))[0]} sinyal ({genel_ozet.get('ZARAR', (0,0))[1]:.0f} TL)
+
+📋 SON 30 SİNYAL:
+{chr(10).join([f"• {r[0]} {r[6]} {r[7]}: Giriş {r[1]:.2f} TL | RSI:{r[4]:.0f} | {r[8]}{' | '+str(round(r[9],0))+' TL' if r[9] else ''}" for r in son30]) or '• Henüz sinyal yok'}
+
+⚙️ SİSTEM KRİTERLERİ:
+• VWAP üstü fiyat
+• EMA9 > EMA21 > EMA50 (trend stack)
+• RSI ≥ 50
+• MACD histogram pozitif
+• Hacim x1.5 ortalamanın üstü
+• Son 2 mum yeşil
+• Günlük trend yukarı
+• Piyasa saatleri: 10:30–12:00 ve 13:30–17:40
+• Kâr hedefi: %2 | Stop-loss: %1 | Max 2 sinyal/hisse/gün
+
+Kullanıcı sana her türlü borsa sorusu sorabilir. Hisse analizi, yorum, strateji, teknik analiz — hepsini Türkçe, net ve akıcı cevapla. Emoji kullan. Gereksiz uzatma ama kapsamlı ol."""
+
+    with _ai_lock:
+        if chat_id not in _konusma_gecmisi:
+            _konusma_gecmisi[chat_id] = []
+        _konusma_gecmisi[chat_id].append({"role": "user", "content": mesaj})
+        gecmis = list(_konusma_gecmisi[chat_id][-20:])  # Son 20 mesaj
+
+    try:
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1500,
+            system=sistem_prompt,
+            messages=gecmis,
+        )
+        cevap = response.content[0].text
+
+        with _ai_lock:
+            _konusma_gecmisi[chat_id].append({"role": "assistant", "content": cevap})
+
+        telegram_gonder_chat(cevap, chat_id)
+    except Exception as e:
+        print(f"AI hatası: {e}")
+        telegram_gonder_chat(f"⚠️ AI hatası: {e}", chat_id)
+
 # ── SİNYAL KAYDET ────────────────────────────────────────────
 def sinyal_kaydet(sembol, sonuc):
     now = datetime.utcnow() + timedelta(hours=3)
@@ -399,6 +526,113 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", len(body))
         self.end_headers()
         self.wfile.write(body)
+
+    def do_POST(self):
+        p = urlparse(self.path)
+        if p.path == "/telegram_webhook":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                update = json.loads(body)
+                message = update.get("message", {})
+                chat_id = str(message.get("chat", {}).get("id", ""))
+                text = (message.get("text") or "").strip()
+                if text and chat_id:
+                    if text == "/start":
+                        telegram_gonder_chat(
+                            "👋 Merhaba! Ben BIST AI Asistanıyım 🤖📈\n\n"
+                            "Sana şunları yapabilirim:\n"
+                            "• Hisse analizi ve yorum\n"
+                            "• Güncel sinyalleri açıklama\n"
+                            "• Teknik analiz soruları\n"
+                            "• Strateji ve risk değerlendirmesi\n"
+                            "• Genel borsa yorumu\n\n"
+                            "Ne sormak istiyorsun? ✍️", chat_id)
+                    else:
+                        threading.Thread(target=ai_cevap, args=(text, chat_id), daemon=True).start()
+            except Exception as e:
+                print(f"Webhook parse hatası: {e}")
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        elif p.path == "/api/ai":
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length)
+            try:
+                payload = json.loads(body)
+                mesaj = payload.get("mesaj", "").strip()
+                chat_id = payload.get("chat_id", "web_kullanici")
+                if not mesaj:
+                    self.send_json({"hata": "mesaj boş"}, 400)
+                    return
+                # AI'yı çağır ve cevabı HTTP yanıtı olarak dön
+                if not HAS_ANTHROPIC or not ANTHROPIC_API_KEY:
+                    self.send_json({"cevap": "AI devre dışı (API anahtarı eksik)."})
+                    return
+
+                now = datetime.utcnow() + timedelta(hours=3)
+                bugun = now.strftime("%Y-%m-%d")
+                with _lock:
+                    sinyal_cache = list(_cache.values())
+                aktif = [s for s in sinyal_cache if s.get("sinyal")]
+
+                con = get_db()
+                son30 = con.execute(
+                    "SELECT sembol, fiyat_giris, hedef, stop, rsi, hacim_carpan, tarih, saat, durum, kar_zarar "
+                    "FROM sinyaller ORDER BY id DESC LIMIT 30"
+                ).fetchall()
+                bugun_rows = con.execute(
+                    "SELECT durum, COUNT(*), SUM(kar_zarar) FROM sinyaller WHERE tarih=? GROUP BY durum", (bugun,)
+                ).fetchall()
+                genel_rows = con.execute(
+                    "SELECT durum, COUNT(*), SUM(kar_zarar) FROM sinyaller GROUP BY durum"
+                ).fetchall()
+                con.close()
+
+                bugun_ozet = {r[0]: (r[1], r[2] or 0) for r in bugun_rows}
+                genel_ozet = {r[0]: (r[1], r[2] or 0) for r in genel_rows}
+
+                sistem_prompt = f"""Sen BIST (Borsa İstanbul) uzmanı bir AI borsa asistanısın.
+
+📅 Şu an: {now.strftime('%d.%m.%Y %H:%M')} (Türkiye saati)
+
+🔴 AKTİF SİNYALLER ({len(aktif)} adet):
+{chr(10).join([f"• {s['sembol']}: {s['fiyat']:.2f} TL | RSI:{s['rsi']} | Hacim:x{s['hacim_carpan']}" for s in aktif]) or '• Şu an aktif sinyal yok'}
+
+📊 BUGÜN: KAR:{bugun_ozet.get('KAR',(0,0))[0]} | ZARAR:{bugun_ozet.get('ZARAR',(0,0))[0]} | BEKLIYOR:{bugun_ozet.get('BEKLIYOR',(0,0))[0]}
+📈 GENEL: KAR:{genel_ozet.get('KAR',(0,0))[0]} sinyal | ZARAR:{genel_ozet.get('ZARAR',(0,0))[0]} sinyal
+
+📋 SON 30 SİNYAL:
+{chr(10).join([f"• {r[0]} {r[6]}: {r[1]:.2f} TL RSI:{r[4]:.0f} → {r[8]}{' '+str(round(r[9],0))+' TL' if r[9] else ''}" for r in son30]) or '• Henüz sinyal yok'}
+
+Kullanıcı sana her türlü borsa sorusu sorabilir. Türkçe, net ve kapsamlı cevap ver. Emoji kullanabilirsin."""
+
+                with _ai_lock:
+                    if chat_id not in _konusma_gecmisi:
+                        _konusma_gecmisi[chat_id] = []
+                    _konusma_gecmisi[chat_id].append({"role": "user", "content": mesaj})
+                    gecmis = list(_konusma_gecmisi[chat_id][-20:])
+
+                client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+                response = client.messages.create(
+                    model="claude-opus-4-6",
+                    max_tokens=1500,
+                    system=sistem_prompt,
+                    messages=gecmis,
+                )
+                cevap = response.content[0].text
+
+                with _ai_lock:
+                    _konusma_gecmisi[chat_id].append({"role": "assistant", "content": cevap})
+
+                self.send_json({"cevap": cevap})
+            except Exception as e:
+                print(f"API AI hatası: {e}")
+                self.send_json({"hata": str(e)}, 500)
+        else:
+            self.send_response(404)
+            self.end_headers()
 
     def do_GET(self):
         p = urlparse(self.path)
@@ -556,6 +790,9 @@ if __name__ == "__main__":
     print("  BIST %1 SİNYAL SİSTEMİ v4.0")
     print("=" * 50)
     init_db()
+
+    # Telegram webhook ayarla
+    threading.Thread(target=telegram_webhook_ayarla, daemon=True).start()
 
     # İlk taramayı hemen yap
     t1 = threading.Thread(target=tara, daemon=True)
