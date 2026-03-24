@@ -155,6 +155,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
         <button class="filtre-btn" onclick="sonucTarihFiltre('bugun',this)">Bugün</button>
         <button class="filtre-btn" onclick="sonucTarihFiltre('hafta',this)">Bu Hafta</button>
         <button class="filtre-btn" onclick="sonucTarihFiltre('tum',this)">Tüm Zamanlar</button>
+        <button class="filtre-btn" onclick="sonucStratejiFiltre('S1',this)" style="border-color:#22c55e;color:#22c55e">S1·15dk</button>
+        <button class="filtre-btn" onclick="sonucStratejiFiltre('S2',this)" style="border-color:#3b82f6;color:#3b82f6">S2·1sa</button>
+        <button class="filtre-btn" onclick="sonucStratejiFiltre('S3',this)" style="border-color:#a855f7;color:#a855f7">S3·4sa</button>
       </div>
       <div style="flex:1;overflow-y:auto;padding:0 12px 12px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch">
         <div id="sonucOzet"></div>
@@ -229,7 +232,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <script>
 const $ = id => document.getElementById(id);
 const fmt = (n,d=2) => n==null?'—':Number(n).toLocaleString('tr-TR',{minimumFractionDigits:d,maximumFractionDigits:d});
-let aktifTab='canli', sonucDurum='', sonucTarih='bugun';
+let aktifTab='canli', sonucDurum='', sonucTarih='bugun', sonucStrateji='';
 
 // ── NAVİGASYON ────────────────────────────────────────────
 function goTab(id,btn){
@@ -263,10 +266,12 @@ async function yukleCanli(){
     $('canliListe').innerHTML=`<div class="bos">Şu an aktif sinyal yok<br><span style="font-size:11px">Sistem 15 dakikada bir tarıyor</span></div>`;
     return;
   }
+  const stratRenk={'S1':'#22c55e','S2':'#3b82f6','S3':'#a855f7'};
+  const stratLabel={'S1':'S1·15dk','S2':'S2·1sa','S3':'S3·4sa'};
   $('canliListe').innerHTML=liste.map(s=>`
-    <div class="sinyal-kart" onclick="detayAc(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+    <div class="sinyal-kart" onclick="detayAc(${JSON.stringify(s).replace(/"/g,'&quot;')})" style="border-left-color:${stratRenk[s.strateji]||'var(--green)'}">
       <div class="sk-header">
-        <span class="sk-sembol">${s.sembol}</span>
+        <span class="sk-sembol">${s.sembol} <span style="font-size:10px;font-weight:700;color:${stratRenk[s.strateji]||'#22c55e'};background:${stratRenk[s.strateji]||'#22c55e'}20;border-radius:4px;padding:1px 5px">${stratLabel[s.strateji]||'S1'}</span></span>
         <span class="sk-fiyat">${fmt(s.fiyat,2)} TL</span>
       </div>
       <div class="sk-body">
@@ -323,15 +328,22 @@ function sonucTarihFiltre(tarih,btn){
   btn.classList.add('active');
   yuklesonuclar();
 }
+function sonucStratejiFiltre(strat,btn){
+  sonucStrateji = sonucStrateji===strat ? '' : strat;
+  document.querySelectorAll('#tab-sonuclar .filtre-btn').forEach(b=>b.classList.remove('active'));
+  if(sonucStrateji) btn.classList.add('active');
+  yuklesonuclar();
+}
 
 async function yuklesonuclar(){
   let tarihParam='';
   const bugun=new Date().toISOString().split('T')[0];
   if(sonucTarih==='bugun') tarihParam=`&tarih=${bugun}`;
   else if(sonucTarih==='hafta') tarihParam='&limit=200';
+  const stratParam = sonucStrateji ? `&strateji=${sonucStrateji}` : '';
 
   const [r, canli] = await Promise.all([
-    fetch(`/api/sinyaller?durum=${sonucDurum}${tarihParam}`).then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}})),
+    fetch(`/api/sinyaller?durum=${sonucDurum}${tarihParam}${stratParam}`).then(r=>r.json()).catch(()=>({sinyaller:[],ozet:{}})),
     fetch('/api/canli').then(r=>r.json()).catch(()=>({sinyaller:[]}))
   ]);
 
@@ -366,9 +378,12 @@ async function yuklesonuclar(){
     const anlikHtml=s.durum==='BEKLIYOR'&&anlik
       ? `<span style="font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:800;color:var(--cyan);margin-left:8px">${fmt(anlik,2)} TL</span>`
       : '';
-    return`<div class="sonuc-kart ${durumClass}">
+    const stratRnk2={'S1':'#22c55e','S2':'#3b82f6','S3':'#a855f7'};
+    const stratLbl2={'S1':'S1·15dk','S2':'S2·1sa','S3':'S3·4sa'};
+    const strat=s.strateji||'S1';
+    return`<div class="sonuc-kart ${durumClass}" style="border-left-color:${stratRnk2[strat]||'#22c55e'}">
       <div class="sonuc-header">
-        <span class="sonuc-sembol">${s.sembol}</span>
+        <span class="sonuc-sembol">${s.sembol} <span style="font-size:10px;font-weight:700;color:${stratRnk2[strat]};background:${stratRnk2[strat]}20;border-radius:4px;padding:1px 5px">${stratLbl2[strat]}</span></span>
         <span style="display:flex;align-items:center">
           <span class="sonuc-badge ${badgeClass}">${s.durum==='BEKLIYOR'?'⏳ Bekliyor':s.durum==='KAR'?'✅ KÂR':'❌ ZARAR'}</span>
           ${anlikHtml}

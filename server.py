@@ -64,9 +64,15 @@ def init_db():
         ema20 REAL, ema50 REAL, rsi REAL, hacim_carpan REAL,
         son_3_mum TEXT, degisim_15dk REAL, guncelleme TEXT)""")
     c.execute("""CREATE TABLE IF NOT EXISTS gunluk_sinyal_sayisi (
-        sembol TEXT, tarih TEXT, sayisi INTEGER DEFAULT 0,
-        PRIMARY KEY (sembol, tarih))""")
+        sembol TEXT, tarih TEXT, strateji TEXT DEFAULT 'S1', sayisi INTEGER DEFAULT 0,
+        PRIMARY KEY (sembol, tarih, strateji))""")
     con.commit()
+    # Migration: strateji kolonu ekle
+    try:
+        c.execute("ALTER TABLE sinyaller ADD COLUMN strateji TEXT DEFAULT 'S1'")
+        con.commit()
+    except:
+        pass
     con.close()
 
 def get_db():
@@ -103,6 +109,47 @@ def calc_vwap(closes, volumes):
     total_pv = sum(c * v for c, v in zip(closes, volumes))
     total_v = sum(volumes)
     return total_pv / total_v if total_v else closes[-1]
+
+def calc_atr(highs, lows, closes, period=14):
+    if len(closes) < period + 1:
+        return None
+    trs = []
+    for i in range(1, len(closes)):
+        tr = max(highs[i] - lows[i],
+                 abs(highs[i] - closes[i-1]),
+                 abs(lows[i] - closes[i-1]))
+        trs.append(tr)
+    if len(trs) < period:
+        return None
+    atr = sum(trs[:period]) / period
+    for tr in trs[period:]:
+        atr = (atr * (period - 1) + tr) / period
+    return atr
+
+def calc_ssl(closes, highs, lows, period=10):
+    if len(closes) < period + 2:
+        return None, None
+    ema_h = calc_ema(highs, period)
+    ema_l = calc_ema(lows, period)
+    hlv = [0] * len(closes)
+    for i in range(period, len(closes)):
+        if ema_h[i] is None or ema_l[i] is None:
+            hlv[i] = hlv[i-1]
+        elif closes[i] > ema_h[i]:
+            hlv[i] = 1
+        elif closes[i] < ema_l[i]:
+            hlv[i] = -1
+        else:
+            hlv[i] = hlv[i-1]
+    ssl_up, ssl_dn = [], []
+    for i in range(len(closes)):
+        if ema_h[i] is None or ema_l[i] is None:
+            ssl_up.append(None); ssl_dn.append(None)
+        elif hlv[i] < 0:
+            ssl_up.append(ema_h[i]); ssl_dn.append(ema_l[i])
+        else:
+            ssl_up.append(ema_l[i]); ssl_dn.append(ema_h[i])
+    return ssl_up, ssl_dn
 
 def calc_macd(prices, fast=12, slow=26, signal=9):
     if len(prices) < slow + signal:
@@ -211,39 +258,175 @@ def sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d):
         }
     }
 
+def sinyal_kontrol_ssl(sembol, closes, highs, lows, volumes, closes_1d, strateji):
+    """SSL Hybrid sinyal — S2 (1h) ve S3 (4h) için"""
+    min_bar = 60
+    if len(closes) < min_bar or len(highs) < min_bar:
+        return None
+
+    # Baseline: EMA50
+    ema50 = calc_ema(closes, 50)
+    baseline = next((v for v in reversed(ema50) if v), None)
+    if not baseline:
+        return None
+
+    # SSL Channel (period=10)
+    ssl_up, ssl_dn = calc_ssl(closes, highs, lows, period=10)
+    if ssl_up is None or len(ssl_up) < 2:
+        return None
+    prev_up, prev_dn = ssl_up[-2], ssl_dn[-2]
+    curr_up, curr_dn = ssl_up[-1], ssl_dn[-1]
+    if None in [prev_up, prev_dn, curr_up, curr_dn]:
+        return None
+
+    # Crossover: önceki bar down>up iken şimdi up>down
+    ssl_crossover = (prev_up <= prev_dn) and (curr_up > curr_dn)
+
+    # ATR stop
+    atr = calc_atr(highs, lows, closes, period=14)
+    fiyat = closes[-1]
+    multiplier = 1.5 if strateji == 'S2' else 2.0
+    atr_stop = round(fiyat - atr * multiplier, 4) if atr else round(fiyat * 0.985, 4)
+
+    # RSI
+    rsi = calc_rsi(closes)
+
+    # Hacim
+    vol_ort = sum(volumes[-20:]) / 20 if len(volumes) >= 20 else 0
+    hacim_carpan = volumes[-1] / vol_ort if vol_ort else 0
+
+    # Günlük trend
+    gunluk_yukari = True
+    if len(closes_1d) >= 50:
+        e20_d = calc_ema(closes_1d, 20)
+        e50_d = calc_ema(closes_1d, 50)
+        gema20 = next((v for v in reversed(e20_d) if v), None)
+        gema50 = next((v for v in reversed(e50_d) if v), None)
+        if gema20 and gema50:
+            gunluk_yukari = gema20 > gema50
+
+    # Saat kontrolü
+    turkey_now = datetime.utcnow() + timedelta(hours=3)
+    saat = turkey_now.hour * 60 + turkey_now.minute
+    pencere1 = (10 * 60 + 30) <= saat <= (12 * 60 + 0)
+    pencere2 = (13 * 60 + 30) <= saat <= (17 * 60 + 40)
+    piyasa_acik = pencere1 or pencere2
+
+    k1 = fiyat > baseline
+    k2 = ssl_crossover
+    k3 = rsi >= 50
+    k4 = hacim_carpan >= 1.2
+    k5 = gunluk_yukari
+    k6 = piyasa_acik
+
+    tumu = k1 and k2 and k3 and k4 and k5 and k6
+
+    hedef_pct = 1.03 if strateji == 'S2' else 1.04
+    return {
+        "sinyal": tumu,
+        "fiyat": round(fiyat, 4),
+        "rsi": rsi,
+        "hacim_carpan": round(hacim_carpan, 2),
+        "degisim_15dk": 0,
+        "hedef": round(fiyat * hedef_pct, 4),
+        "stop": atr_stop,
+        "ema9": round(curr_up, 4),
+        "ema50": round(baseline, 4),
+        "kriterler": {
+            "baseline": k1, "ssl_cross": k2, "rsi": k3,
+            "hacim": k4, "gunluk": k5, "saat": k6
+        }
+    }
+
 # ── VERİ ÇEKME ───────────────────────────────────────────────
 _cache = {}
 _lock = threading.Lock()
 
 def veri_cek(sembol):
     try:
+        import pandas as pd
         t = yf.Ticker(sembol + ".IS")
-        df_1m = t.history(period="5d", interval="15m")
+        df_15m = t.history(period="5d", interval="15m")
+        df_1h  = t.history(period="60d", interval="1h")
         df_1d  = t.history(period="3mo", interval="1d")
-        if df_1m is None or len(df_1m) < 25:
+        if df_15m is None or len(df_15m) < 25:
             return None
-        closes_15m  = [float(x) for x in df_1m["Close"].tolist()]
-        volumes_15m = [int(x) for x in df_1m["Volume"].tolist()]
-        closes_1d   = [float(x) for x in df_1d["Close"].tolist()] if df_1d is not None else []
-        return closes_15m, volumes_15m, closes_1d
+
+        d1_closes = [float(x) for x in df_1d["Close"].tolist()] if df_1d is not None else []
+
+        # S1: 15m
+        s1 = {
+            "closes":  [float(x) for x in df_15m["Close"].tolist()],
+            "volumes": [int(x)   for x in df_15m["Volume"].tolist()],
+        }
+
+        # S2: 1h
+        s2 = None
+        if df_1h is not None and len(df_1h) >= 60:
+            s2 = {
+                "closes":  [float(x) for x in df_1h["Close"].tolist()],
+                "highs":   [float(x) for x in df_1h["High"].tolist()],
+                "lows":    [float(x) for x in df_1h["Low"].tolist()],
+                "volumes": [int(x)   for x in df_1h["Volume"].tolist()],
+            }
+
+        # S3: 4h (1h verisi 4'e grupla)
+        s3 = None
+        if df_1h is not None and len(df_1h) >= 32:
+            try:
+                df_4h = df_1h.copy()
+                if df_4h.index.tz:
+                    df_4h.index = df_4h.index.tz_convert("UTC").tz_localize(None)
+                df_4h = df_4h.resample("4h").agg({
+                    "Open": "first", "High": "max", "Low": "min",
+                    "Close": "last", "Volume": "sum"
+                }).dropna()
+                if len(df_4h) >= 30:
+                    s3 = {
+                        "closes":  [float(x) for x in df_4h["Close"].tolist()],
+                        "highs":   [float(x) for x in df_4h["High"].tolist()],
+                        "lows":    [float(x) for x in df_4h["Low"].tolist()],
+                        "volumes": [int(x)   for x in df_4h["Volume"].tolist()],
+                    }
+            except:
+                pass
+
+        return {"s1": s1, "s2": s2, "s3": s3, "d1": d1_closes}
     except:
         return None
 
 def veri_cek_demo(sembol):
-    import random, math
+    import random
     random.seed(abs(hash(sembol)) % 9999)
     base = random.uniform(10, 500)
-    closes_15m, vols = [], []
-    f = base
-    for i in range(80):
-        f *= random.uniform(0.995, 1.005)
-        closes_15m.append(round(f, 4))
-        vols.append(int(random.uniform(100000, 2000000)))
-    # Son 3 mumu yükselt (sinyal olasılığı artırsın)
-    for i in range(-3, 0):
-        closes_15m[i] = closes_15m[i-1] * random.uniform(1.001, 1.004)
-    closes_1d = [base * random.uniform(0.95, 1.05) for _ in range(60)]
-    return closes_15m, vols, closes_1d
+
+    def gen_bars(n, step=1.0):
+        closes, highs, lows, vols = [], [], [], []
+        f = base * step
+        for _ in range(n):
+            f *= random.uniform(0.995, 1.008)
+            h = f * random.uniform(1.001, 1.005)
+            l = f * random.uniform(0.995, 0.999)
+            closes.append(round(f, 4))
+            highs.append(round(h, 4))
+            lows.append(round(l, 4))
+            vols.append(int(random.uniform(100000, 2000000)))
+        for i in range(-3, 0):
+            closes[i] = closes[i-1] * random.uniform(1.001, 1.005)
+            highs[i]  = closes[i] * 1.003
+        return closes, highs, lows, vols
+
+    c15, h15, l15, v15 = gen_bars(80)
+    c1h, h1h, l1h, v1h = gen_bars(80, 1.0)
+    c4h, h4h, l4h, v4h = gen_bars(60, 1.0)
+    d1c = [base * random.uniform(0.95, 1.05) for _ in range(60)]
+
+    return {
+        "s1": {"closes": c15, "volumes": v15},
+        "s2": {"closes": c1h, "highs": h1h, "lows": l1h, "volumes": v1h},
+        "s3": {"closes": c4h, "highs": h4h, "lows": l4h, "volumes": v4h},
+        "d1": d1c,
+    }
 
 # ── TELEGRAM ─────────────────────────────────────────────────
 def telegram_gonder(mesaj):
@@ -374,35 +557,40 @@ Kullanıcı sana her türlü borsa sorusu sorabilir. Hisse analizi, yorum, strat
         telegram_gonder_chat(f"⚠️ AI hatası: {e}", chat_id)
 
 # ── SİNYAL KAYDET ────────────────────────────────────────────
-def sinyal_kaydet(sembol, sonuc):
+def sinyal_kaydet(sembol, sonuc, strateji='S1'):
     now = datetime.utcnow() + timedelta(hours=3)
     tarih = now.strftime("%Y-%m-%d")
     saat  = now.strftime("%H:%M")
 
-    # Günlük limit kontrolü (max 2 sinyal/hisse)
+    # Günlük limit: max 2 sinyal/hisse/strateji
     con = get_db()
-    row = con.execute("SELECT sayisi FROM gunluk_sinyal_sayisi WHERE sembol=? AND tarih=?", (sembol, tarih)).fetchone()
+    row = con.execute(
+        "SELECT sayisi FROM gunluk_sinyal_sayisi WHERE sembol=? AND tarih=? AND strateji=?",
+        (sembol, tarih, strateji)).fetchone()
     sayisi = row[0] if row else 0
     if sayisi >= 2:
         con.close()
         return False
 
-    con.execute("INSERT OR REPLACE INTO gunluk_sinyal_sayisi VALUES (?,?,?)", (sembol, tarih, sayisi + 1))
-    con.execute("""INSERT INTO sinyaller (sembol, fiyat_giris, hedef, stop, rsi, hacim_carpan,
-        ema20, ema50, tarih, saat, durum) VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+    con.execute("INSERT OR REPLACE INTO gunluk_sinyal_sayisi VALUES (?,?,?,?)",
+                (sembol, tarih, strateji, sayisi + 1))
+    con.execute("""INSERT INTO sinyaller
+        (sembol, fiyat_giris, hedef, stop, rsi, hacim_carpan, ema20, ema50,
+         tarih, saat, durum, strateji)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (sembol, sonuc["fiyat"], sonuc["hedef"], sonuc["stop"],
-         sonuc["rsi"], sonuc["hacim_carpan"], sonuc["ema9"], sonuc["ema50"],
-         tarih, saat, "BEKLIYOR"))
+         sonuc["rsi"], sonuc["hacim_carpan"], sonuc.get("ema9", 0), sonuc.get("ema50", 0),
+         tarih, saat, "BEKLIYOR", strateji))
     con.commit()
     con.close()
 
-    # Telegram bildirimi
-    msg = (f"🟢 <b>{sembol}</b> — AL SİNYALİ\n"
+    etiket = {"S1": "📊 S1 · 15dk", "S2": "📈 S2 · 1sa", "S3": "🕐 S3 · 4sa"}.get(strateji, strateji)
+    hedef_pct = {"S1": "+%2", "S2": "+%3", "S3": "+%4"}.get(strateji, "")
+    msg = (f"🟢 <b>{sembol}</b> — AL SİNYALİ  [{etiket}]\n"
            f"💰 Fiyat: {sonuc['fiyat']:.2f} TL\n"
-           f"🎯 Hedef: {sonuc['hedef']:.2f} TL (+%2)\n"
-           f"🛡 Stop: {sonuc['stop']:.2f} TL (-%1)\n"
+           f"🎯 Hedef: {sonuc['hedef']:.2f} TL ({hedef_pct})\n"
+           f"🛡 Stop: {sonuc['stop']:.2f} TL\n"
            f"📊 RSI: {sonuc['rsi']} | Hacim: x{sonuc['hacim_carpan']}\n"
-           f"📈 15dk değişim: +{sonuc['degisim_15dk']}%\n"
            f"🕐 {saat}")
     telegram_gonder(msg)
     return True
@@ -440,74 +628,104 @@ def sonuc_guncelle():
             telegram_gonder(f"🔴 <b>{sembol}</b> STOP ÇALIŞTI! {zarar:.0f} TL zarar")
 
 # ── TARAMA DÖNGÜSÜ ───────────────────────────────────────────
-son_sinyal = {}
+son_sinyal = {}  # key: "SEMBOL_S1" gibi
 
 def tara():
     global son_sinyal
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama başlıyor...")
-    veri_sayisi = 0
-    hata_sayisi = 0
-    kriter_say = {f"k{i}": 0 for i in [1,2,3,4,5,6,8,9]}
+    now_str = (datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')
+    print(f"[{now_str}] Tarama başlıyor...")
+    veri_sayisi = sinyal_sayisi = hata_sayisi = 0
+
     for sembol in BIST100:
         try:
-            if VERI_MODU == "gercek":
-                veri = veri_cek(sembol)
-            else:
-                veri = veri_cek_demo(sembol)
-
+            veri = veri_cek(sembol) if VERI_MODU == "gercek" else veri_cek_demo(sembol)
             if not veri:
                 continue
-
-            closes_15m, volumes_15m, closes_1d = veri
             veri_sayisi += 1
 
-            sonuc = sinyal_kontrol(sembol, closes_15m, volumes_15m, closes_1d)
+            d1 = veri["d1"]
 
-            if sonuc:
-                k = sonuc.get("kriterler", {})
-                if k.get("vwap"): kriter_say["k1"] += 1
-                if k.get("ema_stack"): kriter_say["k2"] += 1
-                if k.get("rsi"): kriter_say["k3"] += 1
-                if k.get("macd"): kriter_say["k4"] += 1
-                if k.get("hacim"): kriter_say["k5"] += 1
-                if k.get("momentum"): kriter_say["k6"] += 1
-                if k.get("gunluk"): kriter_say["k8"] += 1
-                if k.get("saat"): kriter_say["k9"] += 1
-                with _lock:
-                    _cache[sembol] = {
-                        "sembol": sembol,
-                        "fiyat": sonuc["fiyat"],
-                        "ema20": sonuc["ema9"],
-                        "ema50": sonuc["ema50"],
-                        "rsi": sonuc["rsi"],
-                        "hacim_carpan": sonuc["hacim_carpan"],
-                        "degisim_15dk": sonuc["degisim_15dk"],
-                        "sinyal": sonuc["sinyal"],
-                        "hedef": sonuc["hedef"],
-                        "stop": sonuc["stop"],
-                        "kriterler": sonuc["kriterler"],
-                    }
-
-                # Sinyal varsa kaydet (son 15dk içinde aynı hisseden gelmemişse)
-                if sonuc["sinyal"]:
+            # ── S1: 15 dakika ──────────────────────────────
+            s1 = veri.get("s1")
+            if s1:
+                sonuc1 = sinyal_kontrol(sembol, s1["closes"], s1["volumes"], d1)
+                if sonuc1:
                     with _lock:
-                        son = son_sinyal.get(sembol)
-                        now = time.time()
-                        if not son or (now - son) > 900:  # 15 dakika
-                            son_sinyal[sembol] = now  # Önceden işaretle (duplicate önleme)
-                            gonder = True
-                        else:
-                            gonder = False
-                    if gonder:
-                        if sinyal_kaydet(sembol, sonuc):
-                            print(f"  🟢 SİNYAL: {sembol} @ {sonuc['fiyat']}")
+                        _cache[f"{sembol}_S1"] = {
+                            "sembol": sembol, "strateji": "S1",
+                            "fiyat": sonuc1["fiyat"], "rsi": sonuc1["rsi"],
+                            "hacim_carpan": sonuc1["hacim_carpan"],
+                            "degisim_15dk": sonuc1["degisim_15dk"],
+                            "sinyal": sonuc1["sinyal"],
+                            "hedef": sonuc1["hedef"], "stop": sonuc1["stop"],
+                        }
+                    if sonuc1["sinyal"]:
+                        key = f"{sembol}_S1"
+                        with _lock:
+                            son = son_sinyal.get(key)
+                            now_t = time.time()
+                            gonder = not son or (now_t - son) > 900
+                            if gonder: son_sinyal[key] = now_t
+                        if gonder and sinyal_kaydet(sembol, sonuc1, "S1"):
+                            print(f"  🟢 S1 SİNYAL: {sembol} @ {sonuc1['fiyat']}")
+                            sinyal_sayisi += 1
+
+            # ── S2: 1 saat ─────────────────────────────────
+            s2 = veri.get("s2")
+            if s2:
+                sonuc2 = sinyal_kontrol_ssl(sembol, s2["closes"], s2["highs"], s2["lows"], s2["volumes"], d1, "S2")
+                if sonuc2:
+                    with _lock:
+                        _cache[f"{sembol}_S2"] = {
+                            "sembol": sembol, "strateji": "S2",
+                            "fiyat": sonuc2["fiyat"], "rsi": sonuc2["rsi"],
+                            "hacim_carpan": sonuc2["hacim_carpan"],
+                            "degisim_15dk": 0, "sinyal": sonuc2["sinyal"],
+                            "hedef": sonuc2["hedef"], "stop": sonuc2["stop"],
+                        }
+                    if sonuc2["sinyal"]:
+                        key = f"{sembol}_S2"
+                        with _lock:
+                            son = son_sinyal.get(key)
+                            now_t = time.time()
+                            gonder = not son or (now_t - son) > 3600  # 1sa cooldown
+                            if gonder: son_sinyal[key] = now_t
+                        if gonder and sinyal_kaydet(sembol, sonuc2, "S2"):
+                            print(f"  🔵 S2 SİNYAL: {sembol} @ {sonuc2['fiyat']}")
+                            sinyal_sayisi += 1
+
+            # ── S3: 4 saat ─────────────────────────────────
+            s3 = veri.get("s3")
+            if s3:
+                sonuc3 = sinyal_kontrol_ssl(sembol, s3["closes"], s3["highs"], s3["lows"], s3["volumes"], d1, "S3")
+                if sonuc3:
+                    with _lock:
+                        _cache[f"{sembol}_S3"] = {
+                            "sembol": sembol, "strateji": "S3",
+                            "fiyat": sonuc3["fiyat"], "rsi": sonuc3["rsi"],
+                            "hacim_carpan": sonuc3["hacim_carpan"],
+                            "degisim_15dk": 0, "sinyal": sonuc3["sinyal"],
+                            "hedef": sonuc3["hedef"], "stop": sonuc3["stop"],
+                        }
+                    if sonuc3["sinyal"]:
+                        key = f"{sembol}_S3"
+                        with _lock:
+                            son = son_sinyal.get(key)
+                            now_t = time.time()
+                            gonder = not son or (now_t - son) > 14400  # 4sa cooldown
+                            if gonder: son_sinyal[key] = now_t
+                        if gonder and sinyal_kaydet(sembol, sonuc3, "S3"):
+                            print(f"  🟣 S3 SİNYAL: {sembol} @ {sonuc3['fiyat']}")
+                            sinyal_sayisi += 1
+
         except Exception as e:
             hata_sayisi += 1
             if hata_sayisi <= 3:
                 print(f"  HATA {sembol}: {e}")
 
     sonuc_guncelle()
-    print(f"[{(datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')}] Tarama bitti. Cache:{len(_cache)} | VWAP:{kriter_say['k1']} EMA:{kriter_say['k2']} RSI:{kriter_say['k3']} MACD:{kriter_say['k4']} HACIM:{kriter_say['k5']} MOM:{kriter_say['k6']} GUNLUK:{kriter_say['k8']} SAAT:{kriter_say['k9']}")
+    now_str2 = (datetime.utcnow() + timedelta(hours=3)).strftime('%H:%M:%S')
+    print(f"[{now_str2}] Tarama bitti. Veri:{veri_sayisi} | Sinyal:{sinyal_sayisi} | Hata:{hata_sayisi}")
 
 def tarama_dongusu():
     while True:
@@ -651,11 +869,11 @@ Kullanıcı sana her türlü borsa sorusu sorabilir. Türkçe, net ve kapsamlı 
 
         elif path == "/api/canli":
             with _lock:
-                sinyaller = [v for v in _cache.values() if v.get("sinyal")]
                 tumu = list(_cache.values())
+            sinyaller = [v for v in tumu if v.get("sinyal")]
             self.send_json({
                 "sinyaller": sinyaller,
-                "tarama_sayisi": len(tumu),
+                "tarama_sayisi": len(set(v["sembol"] for v in tumu)),
                 "sinyal_sayisi": len(sinyaller),
                 "zaman": (datetime.utcnow() + timedelta(hours=3)).strftime("%H:%M:%S"),
                 "mod": VERI_MODU
@@ -665,6 +883,7 @@ Kullanıcı sana her türlü borsa sorusu sorabilir. Türkçe, net ve kapsamlı 
             tarih = params.get("tarih", [""])[0]
             durum = params.get("durum", [""])[0]
             sembol = params.get("sembol", [""])[0]
+            strateji = params.get("strateji", [""])[0]
             limit = int(params.get("limit", ["100"])[0])
 
             q = "SELECT * FROM sinyaller WHERE 1=1"
@@ -672,6 +891,7 @@ Kullanıcı sana her türlü borsa sorusu sorabilir. Türkçe, net ve kapsamlı 
             if tarih: q += " AND tarih=?"; args.append(tarih)
             if durum: q += " AND durum=?"; args.append(durum)
             if sembol: q += " AND sembol=?"; args.append(sembol.upper())
+            if strateji: q += " AND strateji=?"; args.append(strateji.upper())
             q += " ORDER BY id DESC LIMIT ?"
             args.append(limit)
 
