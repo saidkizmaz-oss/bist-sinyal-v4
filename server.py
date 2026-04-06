@@ -342,58 +342,91 @@ def sinyal_kontrol_ssl(sembol, closes, highs, lows, volumes, closes_1d, strateji
 _cache = {}
 _lock = threading.Lock()
 
-def veri_cek(sembol):
+def _parse_ticker_df(df_all, ticker, tek):
+    """MultiIndex yf.download çıktısından tek ticker DataFrame'ini çıkarır."""
+    if tek:
+        return df_all
     try:
-        import pandas as pd
-        t = yf.Ticker(sembol + ".IS")
-        df_15m = t.history(period="5d", interval="15m")
-        df_1h  = t.history(period="60d", interval="1h")
-        df_1d  = t.history(period="3mo", interval="1d")
-        if df_15m is None or len(df_15m) < 25:
+        lvl0 = df_all.columns.get_level_values(0)
+        if ticker not in lvl0:
             return None
+        df = df_all[ticker].dropna(how="all")
+        return df if len(df) > 0 else None
+    except:
+        return None
 
-        d1_closes = [float(x) for x in df_1d["Close"].tolist()] if df_1d is not None else []
+def veri_cek_toplu():
+    """Tüm hisseleri yf.download() ile tek seferde çeker — rate limit'i önler."""
+    try:
+        semboller = [s + ".IS" for s in BIST100]
+        tek = len(semboller) == 1
 
-        # S1: 15m
-        s1 = {
-            "closes":  [float(x) for x in df_15m["Close"].tolist()],
-            "volumes": [int(x)   for x in df_15m["Volume"].tolist()],
-        }
+        print("  Toplu veri indiriliyor (15m)...")
+        df_15m_all = yf.download(semboller, period="5d",  interval="15m", group_by="ticker", auto_adjust=True, progress=False)
+        print("  Toplu veri indiriliyor (1h)...")
+        df_1h_all  = yf.download(semboller, period="60d", interval="1h",  group_by="ticker", auto_adjust=True, progress=False)
+        print("  Toplu veri indiriliyor (1d)...")
+        df_1d_all  = yf.download(semboller, period="3mo", interval="1d",  group_by="ticker", auto_adjust=True, progress=False)
 
-        # S2: 1h
-        s2 = None
-        if df_1h is not None and len(df_1h) >= 60:
-            s2 = {
-                "closes":  [float(x) for x in df_1h["Close"].tolist()],
-                "highs":   [float(x) for x in df_1h["High"].tolist()],
-                "lows":    [float(x) for x in df_1h["Low"].tolist()],
-                "volumes": [int(x)   for x in df_1h["Volume"].tolist()],
-            }
-
-        # S3: 4h (1h verisi 4'e grupla)
-        s3 = None
-        if df_1h is not None and len(df_1h) >= 32:
+        sonuc = {}
+        for sembol in BIST100:
             try:
-                df_4h = df_1h.copy()
-                if df_4h.index.tz:
-                    df_4h.index = df_4h.index.tz_convert("UTC").tz_localize(None)
-                df_4h = df_4h.resample("4h").agg({
-                    "Open": "first", "High": "max", "Low": "min",
-                    "Close": "last", "Volume": "sum"
-                }).dropna()
-                if len(df_4h) >= 30:
-                    s3 = {
-                        "closes":  [float(x) for x in df_4h["Close"].tolist()],
-                        "highs":   [float(x) for x in df_4h["High"].tolist()],
-                        "lows":    [float(x) for x in df_4h["Low"].tolist()],
-                        "volumes": [int(x)   for x in df_4h["Volume"].tolist()],
+                ticker = sembol + ".IS"
+                df_15m = _parse_ticker_df(df_15m_all, ticker, tek)
+                df_1h  = _parse_ticker_df(df_1h_all,  ticker, tek)
+                df_1d  = _parse_ticker_df(df_1d_all,  ticker, tek)
+
+                if df_15m is None or len(df_15m) < 25:
+                    continue
+
+                d1_closes = [float(x) for x in df_1d["Close"].tolist()] if df_1d is not None and len(df_1d) > 0 else []
+
+                s1 = {
+                    "closes":  [float(x) for x in df_15m["Close"].tolist()],
+                    "volumes": [int(x)   for x in df_15m["Volume"].tolist()],
+                }
+
+                s2 = None
+                if df_1h is not None and len(df_1h) >= 60:
+                    s2 = {
+                        "closes":  [float(x) for x in df_1h["Close"].tolist()],
+                        "highs":   [float(x) for x in df_1h["High"].tolist()],
+                        "lows":    [float(x) for x in df_1h["Low"].tolist()],
+                        "volumes": [int(x)   for x in df_1h["Volume"].tolist()],
                     }
+
+                s3 = None
+                if df_1h is not None and len(df_1h) >= 32:
+                    try:
+                        df_4h = df_1h.copy()
+                        if df_4h.index.tz:
+                            df_4h.index = df_4h.index.tz_convert("UTC").tz_localize(None)
+                        df_4h = df_4h.resample("4h").agg({
+                            "Open": "first", "High": "max", "Low": "min",
+                            "Close": "last", "Volume": "sum"
+                        }).dropna()
+                        if len(df_4h) >= 30:
+                            s3 = {
+                                "closes":  [float(x) for x in df_4h["Close"].tolist()],
+                                "highs":   [float(x) for x in df_4h["High"].tolist()],
+                                "lows":    [float(x) for x in df_4h["Low"].tolist()],
+                                "volumes": [int(x)   for x in df_4h["Volume"].tolist()],
+                            }
+                    except:
+                        pass
+
+                sonuc[sembol] = {"s1": s1, "s2": s2, "s3": s3, "d1": d1_closes}
             except:
                 pass
 
-        return {"s1": s1, "s2": s2, "s3": s3, "d1": d1_closes}
-    except:
-        return None
+        return sonuc
+    except Exception as e:
+        print(f"  Toplu veri hatası: {e}")
+        return {}
+
+def veri_cek(sembol):
+    """Tek hisse için yedek fonksiyon (artık kullanılmıyor)."""
+    return None
 
 def veri_cek_demo(sembol):
     import random
@@ -636,9 +669,16 @@ def tara():
     print(f"[{now_str}] Tarama başlıyor...")
     veri_sayisi = sinyal_sayisi = hata_sayisi = 0
 
+    # Gerçek modda tüm hisseleri tek seferde toplu indir
+    if VERI_MODU == "gercek":
+        tum_veriler = veri_cek_toplu()
+        print(f"  Toplu indirme tamamlandı: {len(tum_veriler)} hisse verisi alındı")
+    else:
+        tum_veriler = {}
+
     for sembol in BIST100:
         try:
-            veri = veri_cek(sembol) if VERI_MODU == "gercek" else veri_cek_demo(sembol)
+            veri = tum_veriler.get(sembol) if VERI_MODU == "gercek" else veri_cek_demo(sembol)
             if not veri:
                 continue
             veri_sayisi += 1
@@ -730,7 +770,7 @@ def tara():
 def tarama_dongusu():
     while True:
         tara()
-        time.sleep(60)  # Her 1 dakika bekle (efektif ~3-4 dk)
+        time.sleep(300)  # Her 5 dakikada bir tara
 
 # ── HTTP SUNUCU ───────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
